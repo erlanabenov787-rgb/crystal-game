@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Crystal Beat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; overflow: hidden; font-family: -apple-system, sans-serif; color: white; }
+        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 0; }
+
+        /* MENU */
+        #menu {
+            position: fixed; inset: 0; z-index: 10;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: #0a0a0a; padding: 30px 20px;
+        }
+        #menu h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 6px; }
+        #menu p { font-size: 14px; opacity: 0.4; margin-bottom: 30px; }
+
+        #song-list {
+            width: 100%; max-height: 45vh; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 10px;
+            margin-bottom: 20px;
+        }
+        .song-item {
+            background: #1a1a1a; border-radius: 14px;
+            padding: 14px 18px; display: flex; align-items: center;
+            gap: 12px; cursor: pointer; border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .song-item.selected { border-color: #1db954; }
+        .song-item .song-icon { font-size: 24px; }
+        .song-item .song-info { flex: 1; min-width: 0; }
+        .song-item .song-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .song-item .song-sub { font-size: 12px; opacity: 0.4; margin-top: 2px; }
+        .song-item .delete-btn { font-size: 18px; opacity: 0.3; padding: 4px 8px; }
+
+        #empty-state { text-align: center; opacity: 0.3; padding: 30px; font-size: 14px; }
+
+        .btn-add {
+            width: 100%; padding: 16px; border-radius: 14px;
+            background: #1a1a1a; border: 2px dashed #333;
+            color: white; font-size: 15px; cursor: pointer;
+            margin-bottom: 12px;
+        }
+        .btn-play {
+            width: 100%; padding: 18px; border-radius: 14px;
+            background: #1db954; border: none;
+            color: white; font-size: 17px; font-weight: 700; cursor: pointer;
+        }
+        .btn-play:disabled { background: #333; color: #555; cursor: not-allowed; }
+        #fileInput { display: none; }
+
+        /* GAME UI */
+        #game-ui {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+            display: none; flex-direction: column; align-items: center;
+            padding: 16px 16px 0;
+        }
+        #top-bar {
+            width: 100%; display: flex; align-items: center; justify-content: space-between;
+        }
+        #song-tap {
+            flex: 1; text-align: center; cursor: pointer; padding: 8px;
+        }
+        #now-title { font-size: 15px; font-weight: 700; }
+        #now-artist { font-size: 12px; opacity: 0.5; margin-top: 2px; }
+        #score-display { font-size: 28px; font-weight: 800; margin-top: 8px; letter-spacing: -1px; }
+        #combo-display { font-size: 13px; opacity: 0.6; margin-top: 2px; min-height: 18px; }
+
+        #side-btns {
+            display: flex; flex-direction: column; gap: 8px; align-items: center;
+        }
+        .icon-btn {
+            background: rgba(255,255,255,0.1); border: none; color: white;
+            width: 40px; height: 40px; border-radius: 50%; font-size: 16px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+
+        /* SONG PICKER OVERLAY */
+        #picker {
+            position: fixed; inset: 0; z-index: 20;
+            background: rgba(0,0,0,0.9); display: none;
+            flex-direction: column; padding: 30px 20px;
+        }
+        #picker h2 { font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+        #picker-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        #picker-close {
+            margin-top: 16px; width: 100%; padding: 16px; border-radius: 14px;
+            background: #1a1a1a; border: none; color: white; font-size: 15px; cursor: pointer;
+        }
+
+        /* PAUSE OVERLAY */
+        #pause-overlay {
+            position: fixed; inset: 0; z-index: 15;
+            background: rgba(0,0,0,0.8); display: none;
+            flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+        }
+        #pause-overlay h2 { font-size: 32px; font-weight: 800; }
+        .pause-btn {
+            width: 200px; padding: 16px; border-radius: 14px;
+            border: none; color: white; font-size: 16px; font-weight: 600; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- MENU -->
+<div id="menu">
+    <h1>Crystal Beat</h1>
+    <p>музыка × ритм × кристаллы</p>
+    <div id="song-list">
+        <div id="empty-state">🎵 Добавь песни чтобы начать</div>
+    </div>
+    <input type="file" id="fileInput" accept="audio/*" multiple>
+    <button class="btn-add" onclick="document.getElementById('fileInput').click()">+ Добавить песни</button>
+    <button class="btn-play" id="playBtn" disabled onclick="startGame()">▶ Играть</button>
+</div>
+
+<!-- GAME UI -->
+<div id="game-ui">
+    <div id="top-bar">
+        <div style="width:48px"></div>
+        <div id="song-tap" onclick="openPicker()">
+            <div id="now-title">—</div>
+            <div id="now-artist">нажми чтобы сменить</div>
+        </div>
+        <div id="side-btns">
+            <button class="icon-btn" onclick="togglePause()">⏸</button>
+            <button class="icon-btn" onclick="restartGame()">↺</button>
+        </div>
+    </div>
+    <div id="score-display">0</div>
+    <div id="combo-display"></div>
+</div>
+
+<!-- SONG PICKER -->
+<div id="picker">
+    <h2>Выбери песню</h2>
+    <div id="picker-list"></div>
+    <button id="picker-close" onclick="closePicker()">Закрыть</button>
+</div>
+
+<!-- PAUSE -->
+<div id="pause-overlay">
+    <h2>⏸ Пауза</h2>
+    <button class="pause-btn" style="background:#1db954" onclick="togglePause()">▶ Продолжить</button>
+    <button class="pause-btn" style="background:#1a1a1a" onclick="restartGame()">↺ Заново</button>
+    <button class="pause-btn" style="background:#1a1a1a" onclick="goToMenu()">☰ Меню</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// STATE
+let songs = []; // {name, file, url}
+let selectedIndex = -1;
+let score = 0, combo = 0;
+let crystals = [], particles = [];
+let player = { x: canvas.width / 2, y: canvas.height - 120, size: 36, color: '#1db954' };
+let gameRunning = false, paused = false;
+let audioContext, analyser, sourceNode, dataArray;
+let lastBeat = 0, energy = 0;
+let animFrameId = null;
+let touchX = canvas.width / 2;
+
+// FILE INPUT
+document.getElementById('fileInput').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+        const url = URL.createObjectURL(file);
+        const name = file.name.replace(/\.[^/.]+$/, '');
+        songs.push({ name, file, url });
+    });
+    if (selectedIndex === -1 && songs.length > 0) selectedIndex = 0;
+    renderSongList();
+    document.getElementById('playBtn').disabled = songs.length === 0;
+    e.target.value = '';
+});
+
+function renderSongList() {
+    const list = document.getElementById('song-list');
+    if (songs.length === 0) {
+        list.innerHTML = '<div id="empty-state">🎵 Добавь песни чтобы начать</div>';
+        return;
+    }
+    list.innerHTML = songs.map((s, i) => `
+        <div class="song-item ${i === selectedIndex ? 'selected' : ''}" onclick="selectSong(${i})">
+            <div class="song-icon">🎵</div>
+            <div class="song-info">
+                <div class="song-name">${s.name}</div>
+                <div class="song-sub">нажми чтобы выбрать</div>
+            </div>
+            <div class="delete-btn" onclick="deleteSong(event,${i})">✕</div>
+        </div>
+    `).join('');
+}
+
+function selectSong(i) {
+    selectedIndex = i;
+    renderSongList();
+}
+
+function deleteSong(e, i) {
+    e.stopPropagation();
+    songs.splice(i, 1);
+    if (selectedIndex >= songs.length) selectedIndex = songs.length - 1;
+    renderSongList();
+    document.getElementById('playBtn').disabled = songs.length === 0;
+}
+
+// GAME START
+function startGame() {
+    if (selectedIndex < 0 || !songs[selectedIndex]) return;
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('game-ui').style.display = 'flex';
+    loadAndPlay(selectedIndex);
+}
+
+async function loadAndPlay(index) {
+    stopAudio();
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+
+    score = 0; combo = 0; crystals = []; particles = [];
+    paused = false;
+    document.getElementById('score-display').textContent = '0';
+    document.getElementById('combo-display').textContent = '';
+    document.getElementById('pause-overlay').style.display = 'none';
+
+    const song = songs[index];
+    document.getElementById('now-title').textContent = song.name;
+
+    audioContext = new AudioContext();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const arrayBuffer = await song.file.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+    sourceNode = audioContext.createBufferSource();
+    sourceNode.buffer = audioBuffer;
+    sourceNode.connect(analyser);
+    analyser.connect(audioContext.destination);
+    sourceNode.start();
+    sourceNode.onended = () => {
+        // auto next song
+        if (selectedIndex < songs.length - 1) {
+            selectedIndex++;
+            loadAndPlay(selectedIndex);
+        }
+    };
+
+    gameRunning = true;
+    gameLoop();
+}
+
+function stopAudio() {
+    try { if (sourceNode) { sourceNode.onended = null; sourceNode.stop(); } } catch(e) {}
+    try { if (audioContext) audioContext.close(); } catch(e) {}
+    sourceNode = null; audioContext = null; analyser = null;
+}
+
+function restartGame() {
+    document.getElementById('pause-overlay').style.display = 'none';
+    loadAndPlay(selectedIndex);
+}
+
+function goToMenu() {
+    stopAudio();
+    gameRunning = false;
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById('pause-overlay').style.display = 'none';
+    document.getElementById('game-ui').style.display = 'none';
+    document.getElementById('menu').style.display = 'flex';
+    renderSongList();
+}
+
+function togglePause() {
+    if (!gameRunning) return;
+    paused = !paused;
+    if (paused) {
+        audioContext.suspend();
+        document.getElementById('pause-overlay').style.display = 'flex';
+    } else {
+        audioContext.resume();
+        document.getElementById('pause-overlay').style.display = 'none';
+        gameLoop();
+    }
+}
+
+// PICKER
+function openPicker() {
+    if (!gameRunning) return;
+    audioContext.suspend();
+    paused = true;
+    const list = document.getElementById('picker-list');
+    list.innerHTML = songs.map((s, i) => `
+        <div class="song-item ${i === selectedIndex ? 'selected' : ''}" onclick="pickSong(${i})">
+            <div class="song-icon">🎵</div>
+            <div class="song-info">
+                <div class="song-name">${s.name}</div>
+            </div>
+        </div>
+    `).join('');
+    document.getElementById('picker').style.display = 'flex';
+}
+
+function closePicker() {
+    document.getElementById('picker').style.display = 'none';
+    if (paused) {
+        paused = false;
+        audioContext.resume();
+        gameLoop();
+    }
+}
+
+function pickSong(i) {
+    document.getElementById('picker').style.display = 'none';
+    paused = false;
+    selectedIndex = i;
+    loadAndPlay(i);
+}
+
+// TOUCH
+canvas.addEventListener('touchmove', (e) => { e.preventDefault(); touchX = e.touches[0].clientX; }, { passive: false });
+canvas.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; });
+window.addEventListener('mousemove', (e) => { touchX = e.clientX; });
+
+// GAME LOOP
+function spawnCrystal() {
+    const x = 30 + Math.random() * (canvas.width - 60);
+    const size = 14 + Math.random() * 10;
+    crystals.push({ x, y: -size, size, speed: 4 + energy * 0.04, color: '#ffffff', glow: `hsl(${Math.random()*360},100%,75%)` });
+}
+
+function spawnParticles(x, y, color) {
+    for (let i = 0; i < 10; i++) {
+        const angle = (Math.PI * 2 / 10) * i;
+        particles.push({ x, y, vx: Math.cos(angle) * (2 + Math.random() * 3), vy: Math.sin(angle) * (2 + Math.random() * 3), life: 1, color });
+    }
+}
+
+function gameLoop() {
+    if (!gameRunning || paused) return;
+
+    analyser.getByteFrequencyData(dataArray);
+    const bass = dataArray.slice(0, 8).reduce((a, b) => a + b) / 8;
+    energy = bass;
+
+    const now = Date.now();
+    const minInterval = Math.max(150, 500 - energy * 1.5);
+    if (bass > 120 && now - lastBeat > minInterval) {
+        lastBeat = now;
+        spawnCrystal();
+    }
+
+    player.x += (touchX - player.x) * 0.18;
+    player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+
+    // BG
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // BG pulse
+    const pulse = energy / 255;
+    ctx.fillStyle = `rgba(29,185,84,${pulse * 0.06})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Crystals (round)
+    crystals = crystals.filter(c => {
+        c.y += c.speed;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.size, 0, Math.PI * 2);
+        ctx.fillStyle = c.glow;
+        ctx.shadowColor = c.glow;
+        ctx.shadowBlur = 20;
+        ctx.fill();
+        // inner white
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.size * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.shadowBlur = 0;
+        ctx.fill();
+        ctx.restore();
+
+        // Collision
+        const dx = c.x - player.x;
+        const dy = c.y - player.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < c.size + player.size * 0.6) {
+            combo++;
+            const pts = 100 * Math.min(combo, 10);
+            score += pts;
+            document.getElementById('score-display').textContent = score;
+            document.getElementById('combo-display').textContent = combo > 1 ? `${combo}x комбо!` : '';
+            spawnParticles(c.x, c.y, c.glow);
+            return false;
+        }
+
+        if (c.y > canvas.height + 30) {
+            if (combo > 0) { combo = 0; document.getElementById('combo-display').textContent = ''; }
+            return false;
+        }
+        return true;
+    });
+
+    // Particles
+    particles = particles.filter(p => {
+        p.x += p.vx; p.y += p.vy; p.life -= 0.04;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5 * p.life, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        return p.life > 0;
+    });
+
+    // Player (square with glow)
+    ctx.save();
+    ctx.shadowColor = '#1db954';
+    ctx.shadowBlur = 15 + pulse * 20;
+    ctx.fillStyle = '#1db954';
+    const s = player.size;
+    ctx.fillRect(player.x - s/2, player.y - s/2, s, s);
+    ctx.restore();
+
+    animFrameId = requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>

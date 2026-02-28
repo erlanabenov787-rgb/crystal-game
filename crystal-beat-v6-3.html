@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Crystal Beat</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; overflow: hidden; font-family: 'DM Sans', -apple-system, sans-serif; color: white; }
+        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 0; }
+        #menu { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0a0a0a; padding: 30px 20px; }
+        #menu h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 6px; }
+        #menu p { font-size: 14px; opacity: 0.4; margin-bottom: 30px; }
+        #song-list { width: 100%; max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        .song-item { background: #1a1a1a; border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; cursor: pointer; border: 2px solid transparent; }
+        .song-item.selected { border-color: #1db954; }
+        .song-cover { width: 44px; height: 44px; border-radius: 8px; background: #333; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; overflow: hidden; }
+        .song-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .song-info { flex: 1; min-width: 0; }
+        .song-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .song-sub { font-size: 12px; opacity: 0.4; margin-top: 2px; }
+        .delete-btn { font-size: 18px; opacity: 0.3; padding: 4px 8px; }
+        #empty-state { text-align: center; opacity: 0.3; padding: 30px; font-size: 14px; }
+        .btn-add { width: 100%; padding: 16px; border-radius: 14px; background: #1a1a1a; border: 2px dashed #333; color: white; font-size: 15px; cursor: pointer; margin-bottom: 12px; }
+        .btn-play { width: 100%; padding: 18px; border-radius: 14px; background: #1db954; border: none; color: white; font-size: 17px; font-weight: 700; cursor: pointer; }
+        .btn-play:disabled { background: #333; color: #555; }
+        #fileInput { display: none; }
+
+        /* GAME UI */
+        #game-ui { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: none; flex-direction: column; align-items: center; pointer-events: none; }
+
+        /* Spotify-style now playing bar */
+        #spotify-bar {
+            width: calc(100% - 24px);
+            margin: 52px 12px 0;
+            padding: 12px 14px 12px;
+            background: rgba(28, 28, 30, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 18px;
+            pointer-events: all;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        #sp-top { display: flex; align-items: center; gap: 12px; }
+        #sp-art {
+            width: 52px; height: 52px;
+            border-radius: 8px;
+            background: #222;
+            flex-shrink: 0;
+            overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+        }
+        #sp-art img { width: 100%; height: 100%; object-fit: cover; }
+        #sp-info { flex: 1; min-width: 0; cursor: pointer; }
+        #sp-title {
+            font-size: 15px; font-weight: 700;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            letter-spacing: -0.2px;
+        }
+        #sp-artist { font-size: 13px; opacity: 0.55; margin-top: 2px; font-weight: 400; }
+        #sp-btns { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+        .sp-btn {
+            background: rgba(255,255,255,0.08);
+            border: none; color: white;
+            width: 34px; height: 34px;
+            border-radius: 50%;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s;
+        }
+        .sp-btn:active { background: rgba(255,255,255,0.2); }
+        .sp-btn svg { width: 16px; height: 16px; fill: white; }
+
+        /* Progress bar */
+        #sp-progress { display: flex; flex-direction: column; gap: 4px; }
+        #sp-bar-track {
+            width: 100%; height: 3px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            cursor: pointer;
+            position: relative;
+        }
+        #sp-bar-fill {
+            height: 100%; border-radius: 2px;
+            background: white;
+            width: 0%;
+            transition: width 0.5s linear;
+        }
+        #sp-times { display: flex; justify-content: space-between; font-size: 11px; opacity: 0.45; font-weight: 500; letter-spacing: 0.3px; }
+
+        /* Score row */
+        #score-row { display: flex; flex-direction: column; align-items: center; margin-top: 6px; pointer-events: none; }
+        #score-display { font-size: 30px; font-weight: 800; letter-spacing: -1px; }
+        #combo-display { font-size: 13px; opacity: 0.6; margin-top: 1px; min-height: 18px; font-weight: 600; }
+
+        #picker { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.92); display: none; flex-direction: column; padding: 30px 20px; }
+        #picker h2 { font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+        #picker-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        #picker-close { margin-top: 16px; width: 100%; padding: 16px; border-radius: 14px; background: #1a1a1a; border: none; color: white; font-size: 15px; cursor: pointer; }
+        #analyze-overlay { position: fixed; inset: 0; z-index: 25; background: #0a0a0a; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+        #analyze-overlay h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+        #analyze-overlay p { font-size: 14px; opacity: 0.45; }
+        #analyze-bar-track { width: 220px; height: 3px; background: rgba(255,255,255,0.12); border-radius: 2px; margin-top: 8px; }
+        #analyze-bar-fill { height: 100%; width: 0%; background: #1db954; border-radius: 2px; transition: width 0.2s; }
+        #pause-overlay { position: fixed; inset: 0; z-index: 15; background: rgba(0,0,0,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+        #pause-overlay h2 { font-size: 32px; font-weight: 800; }
+        .pause-btn { width: 200px; padding: 16px; border-radius: 14px; border: none; color: white; font-size: 16px; font-weight: 600; cursor: pointer; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="menu">
+    <h1>Crystal Beat</h1>
+    <p>музыка × ритм × кристаллы</p>
+    <div id="song-list"><div id="empty-state">🎵 Добавь песни чтобы начать</div></div>
+    <input type="file" id="fileInput" accept="audio/*" multiple>
+    <button class="btn-add" onclick="document.getElementById('fileInput').click()">+ Добавить песни</button>
+    <button class="btn-play" id="playBtn" disabled onclick="startGame()">▶ Играть</button>
+</div>
+
+<div id="game-ui">
+    <div id="spotify-bar">
+        <div id="sp-top">
+            <div id="sp-art">🎵</div>
+            <div id="sp-info" onclick="openPicker()">
+                <div id="sp-title">—</div>
+                <div id="sp-artist">нажми чтобы сменить</div>
+            </div>
+            <div id="sp-btns">
+                <button class="sp-btn" onclick="prevSong()" title="Предыдущая">
+                    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+                </button>
+                <button class="sp-btn" id="sp-pause-btn" onclick="togglePause()" title="Пауза">
+                    <svg id="sp-pause-icon" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+                <button class="sp-btn" onclick="nextSong()" title="Следующая">
+                    <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg>
+                </button>
+                <button class="sp-btn" onclick="restartGame()" title="Заново">
+                    <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div id="sp-progress">
+            <div id="sp-bar-track">
+                <div id="sp-bar-fill"></div>
+            </div>
+            <div id="sp-times">
+                <span id="sp-current">0:00</span>
+                <span id="sp-total">0:00</span>
+            </div>
+        </div>
+    </div>
+    <div id="score-row">
+        <div id="score-display">0</div>
+        <div id="combo-display"></div>
+    </div>
+</div>
+
+<div id="picker">
+    <h2>Выбери песню</h2>
+    <div id="picker-list"></div>
+    <button id="picker-close" onclick="closePicker()">Закрыть</button>
+</div>
+
+<div id="analyze-overlay">
+    <h2>🎵 Анализ трека...</h2>
+    <p>строим карту ритма</p>
+    <div id="analyze-bar-track"><div id="analyze-bar-fill"></div></div>
+</div>
+
+<div id="pause-overlay">
+    <h2>Пауза</h2>
+    <button class="pause-btn" style="background:#1db954" onclick="togglePause()">Продолжить</button>
+    <button class="pause-btn" style="background:#1a1a1a" onclick="restartGame()">Заново</button>
+    <button class="pause-btn" style="background:#1a1a1a" onclick="goToMenu()">Меню</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const DPR = window.devicePixelRatio || 1;
+canvas.width = window.innerWidth * DPR;
+canvas.height = window.innerHeight * DPR;
+canvas.style.width = window.innerWidth + 'px';
+canvas.style.height = window.innerHeight + 'px';
+ctx.scale(DPR, DPR);
+const W = window.innerWidth;
+const H = window.innerHeight;
+
+// Crystal falls from y=0 to PLAYER_Y in exactly FALL_TIME seconds
+const FALL_TIME = 1.6;
+const PLAYER_Y = H - 120;
+
+let songs = [], selectedIndex = -1;
+let score = 0, combo = 0;
+let crystals = [], particles = [], shockwaves = [], scorePopups = [];
+let holdLines = []; // hold segments
+let flashAlpha = 0, playerScale = 1;
+let player = { x: W / 2, y: PLAYER_Y, size: 36 };
+let gameRunning = false, paused = false;
+let audioContext, analyser, sourceNode, dataArray;
+let audioDuration = 0, audioStartTime = 0;
+let animFrameId = null, progressTickId = null;
+let touchX = W / 2;
+let energy = 0;
+
+// Pre-analyzed chart
+let gameChart = []; // [{time, type:'beat'|'hold', duration?}]
+let chartIndex = 0; // next event to spawn
+
+// Active hold
+let activeHold = null; // {startTime, endTime, path:[{x,y}], playerOnLine, scored}
+
+let palette = { bg: '#0a0a0a', player: '#1db954', crystals: ['#a78bfa', '#60a5fa'] };
+
+// ---- LYRICS ----
+let lyrics = []; // [{time: seconds, text: string}]
+let currentLyricIdx = -1;
+let lyricTransition = 0; // 0-1 for smooth fade-in of new line
+
+// ---- COLORS ----
+function hexToRgb(hex) {
+    return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+}
+function extractColors(img) {
+    const sz=64, oc=document.createElement('canvas');
+    oc.width=sz; oc.height=sz;
+    const c=oc.getContext('2d'); c.drawImage(img,0,0,sz,sz);
+    const d=c.getImageData(0,0,sz,sz).data;
+    const buckets={};
+    for(let i=0;i<d.length;i+=16){
+        const r=Math.round(d[i]/32)*32,g=Math.round(d[i+1]/32)*32,b=Math.round(d[i+2]/32)*32;
+        const k=`${r},${g},${b}`; buckets[k]=(buckets[k]||0)+1;
+    }
+    const sorted=Object.entries(buckets).sort((a,b)=>b[1]-a[1]).map(e=>e[0].split(',').map(Number));
+    const result=[];
+    for(const col of sorted){
+        if(result.length>=4) break;
+        if(!result.some(ex=>Math.abs(ex[0]-col[0])<50&&Math.abs(ex[1]-col[1])<50&&Math.abs(ex[2]-col[2])<50))
+            result.push(col);
+    }
+    while(result.length<4) result.push([200,200,255]);
+    const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.min(255,v).toString(16).padStart(2,'0')).join('');
+    const darken=([r,g,b],f)=>toHex([Math.floor(r*f),Math.floor(g*f),Math.floor(b*f)]);
+    palette.bg=darken(result[0],0.2);
+    palette.player=toHex(result[1]);
+    palette.crystals=[toHex(result[2]),toHex(result[3]||result[2])];
+}
+function tryLoadCover(file,cb){
+    if(typeof jsmediatags==='undefined'){cb(null);return;}
+    jsmediatags.read(file,{
+        onSuccess(tag){
+            const t=tag.tags;
+            // store artist/title back on matching song
+            const idx=songs.findIndex(s=>s.file===file);
+            if(idx>=0){
+                if(t.artist) songs[idx].artist=t.artist;
+                if(t.title)  songs[idx].name=t.title;
+            }
+            const pic=t.picture;
+            if(!pic){cb(null);return;}
+            const b64=btoa(new Uint8Array(pic.data).reduce((d,b)=>d+String.fromCharCode(b),''));
+            const img=new Image();
+            img.onload=()=>{extractColors(img);cb(img.src);};
+            img.onerror=()=>cb(null);
+            img.src=`data:${pic.format};base64,${b64}`;
+        },
+        onError(){cb(null);}
+    });
+}
+
+// ---- SONG LIST ----
+document.getElementById('fileInput').addEventListener('change',(e)=>{
+    const files = Array.from(e.target.files);
+    const startIdx = songs.length;
+    files.forEach((file,fi)=>{
+        const name=file.name.replace(/\.[^/.]+$/,'');
+        const idx=startIdx+fi;
+        songs.push({name,artist:'',file,coverUrl:null});
+        tryLoadCover(file,url=>{
+            if(url){songs[idx].coverUrl=url;}
+            renderSongList();
+        });
+    });
+    if(selectedIndex===-1&&songs.length>0) selectedIndex=0;
+    renderSongList();
+    document.getElementById('playBtn').disabled=songs.length===0;
+    e.target.value='';
+});
+
+function coverHtml(s){return s.coverUrl?`<img src="${s.coverUrl}">`:'🎵';}
+function renderSongList(){
+    const list=document.getElementById('song-list');
+    if(!songs.length){list.innerHTML='<div id="empty-state">🎵 Добавь песни чтобы начать</div>';return;}
+    list.innerHTML=songs.map((s,i)=>`
+        <div class="song-item ${i===selectedIndex?'selected':''}" onclick="selectSong(${i})">
+            <div class="song-cover">${coverHtml(s)}</div>
+            <div class="song-info"><div class="song-name">${s.name}</div><div class="song-sub">нажми чтобы выбрать</div></div>
+            <div class="delete-btn" onclick="deleteSong(event,${i})">✕</div>
+        </div>`).join('');
+}
+function selectSong(i){selectedIndex=i;renderSongList();}
+function deleteSong(e,i){
+    e.stopPropagation();songs.splice(i,1);
+    if(selectedIndex>=songs.length)selectedIndex=songs.length-1;
+    renderSongList();
+    document.getElementById('playBtn').disabled=songs.length===0;
+}
+
+// ---- GAME CONTROL ----
+function startGame(){
+    if(selectedIndex<0||!songs[selectedIndex])return;
+    document.getElementById('menu').style.display='none';
+    document.getElementById('game-ui').style.display='flex';
+    loadAndPlay(selectedIndex);
+}
+
+async function loadAndPlay(index){
+    stopAudio();
+    if(animFrameId){cancelAnimationFrame(animFrameId);animFrameId=null;}
+    score=0;combo=0;crystals=[];particles=[];shockwaves=[];scorePopups=[];holdLines=[];activeHold=null;
+    flashAlpha=0;playerScale=1;energy=0;
+    gameChart=[];chartIndex=0;
+    paused=false;
+    palette={bg:'#0a0a0a',player:'#1db954',crystals:['#a78bfa','#60a5fa']};
+    document.getElementById('score-display').textContent='0';
+    document.getElementById('combo-display').textContent='';
+    document.getElementById('pause-overlay').style.display='none';
+
+    const song=songs[index];
+    lyrics = []; currentLyricIdx = -1; lyricTransition = 0;
+
+    // Spotify bar
+    document.getElementById('sp-title').textContent=song.name;
+    document.getElementById('sp-artist').textContent=song.artist||'нажми чтобы сменить';
+    const artEl=document.getElementById('sp-art');
+    artEl.innerHTML=song.coverUrl?`<img src="${song.coverUrl}">`:'🎵';
+
+    if(song.coverUrl){const img=new Image();img.onload=()=>extractColors(img);img.src=song.coverUrl;}
+    else{tryLoadCover(song.file,url=>{
+        if(url){
+            song.coverUrl=url;
+            document.getElementById('sp-art').innerHTML=`<img src="${url}">`;
+            document.getElementById('sp-title').textContent=song.name;
+            document.getElementById('sp-artist').textContent=song.artist||'нажми чтобы сменить';
+            const img=new Image();img.onload=()=>extractColors(img);img.src=url;
+            renderSongList();
+        }
+    });}
+
+    // Show analyze overlay
+    const analyzeOverlay = document.getElementById('analyze-overlay');
+    analyzeOverlay.style.display='flex';
+    document.getElementById('analyze-bar-fill').style.width='0%';
+
+    // Decode audio
+    const buf = await song.file.arrayBuffer();
+    document.getElementById('analyze-bar-fill').style.width='20%';
+
+    // We need two decoded buffers: one for offline analysis, one for playback
+    audioContext = new AudioContext();
+    const audioBuf = await audioContext.decodeAudioData(buf.slice(0));
+    audioDuration = audioBuf.duration;
+    document.getElementById('analyze-bar-fill').style.width='40%';
+
+    // ---- OFFLINE ANALYSIS ----
+    gameChart = await analyzeTrack(audioBuf, (p) => {
+        document.getElementById('analyze-bar-fill').style.width = (40 + p*50) + '%';
+    });
+    document.getElementById('analyze-bar-fill').style.width='100%';
+
+    // Hide analyze overlay after short delay
+    await new Promise(r => setTimeout(r, 300));
+    analyzeOverlay.style.display='none';
+
+    // Setup realtime analyser (just for visualizer energy, no beat detection)
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.75;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    sourceNode = audioContext.createBufferSource();
+    sourceNode.buffer = audioBuf;
+    sourceNode.connect(analyser);
+    analyser.connect(audioContext.destination);
+    sourceNode.start();
+    audioStartTime = audioContext.currentTime;
+
+    fetchLyrics(song.artist, song.name);
+    document.getElementById('sp-total').textContent=fmtTime(audioDuration);
+    document.getElementById('sp-bar-fill').style.width='0%';
+    if(progressTickId) clearInterval(progressTickId);
+    progressTickId=setInterval(updateProgress,500);
+    sourceNode.onended=()=>{clearInterval(progressTickId);if(selectedIndex<songs.length-1){selectedIndex++;loadAndPlay(selectedIndex);}};
+
+    gameRunning=true;
+    animFrameId=requestAnimationFrame(gameLoop);
+}
+
+// ---- OFFLINE TRACK ANALYSIS ----
+
+// ============================================================
+//  OFFLINE TRACK ANALYSIS — real FFT, band separation, adaptive thresholds
+// ============================================================
+
+// Cooley-Tukey in-place FFT (radix-2, power-of-2 size)
+function fft(re, im) {
+    const N = re.length;
+    // Bit-reversal permutation
+    for(let i = 1, j = 0; i < N; i++){
+        let bit = N >> 1;
+        for(; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if(i < j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; }
+    }
+    // FFT butterfly
+    for(let len = 2; len <= N; len <<= 1){
+        const ang = -2 * Math.PI / len;
+        const wRe = Math.cos(ang), wIm = Math.sin(ang);
+        for(let i = 0; i < N; i += len){
+            let curRe = 1, curIm = 0;
+            for(let j = 0; j < len/2; j++){
+                const uRe = re[i+j],          uIm = im[i+j];
+                const vRe = re[i+j+len/2]*curRe - im[i+j+len/2]*curIm;
+                const vIm = re[i+j+len/2]*curIm + im[i+j+len/2]*curRe;
+                re[i+j]         = uRe + vRe;  im[i+j]         = uIm + vIm;
+                re[i+j+len/2]   = uRe - vRe;  im[i+j+len/2]   = uIm - vIm;
+                const newRe = curRe*wRe - curIm*wIm;
+                curIm = curRe*wIm + curIm*wRe; curRe = newRe;
+            }
+        }
+    }
+}
+
+// Hann window to reduce spectral leakage
+function hannWindow(N) {
+    const w = new Float32Array(N);
+    for(let i = 0; i < N; i++) w[i] = 0.5 * (1 - Math.cos(2*Math.PI*i/(N-1)));
+    return w;
+}
+
+async function analyzeTrack(audioBuf, onProgress) {
+    const SR      = audioBuf.sampleRate;
+    const dur     = audioBuf.duration;
+    const N       = 2048;
+    const HOP     = 512;
+    const hann    = hannWindow(N);
+
+    // Mono mix
+    const ch0 = audioBuf.getChannelData(0);
+    const ch1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : ch0;
+    const mono = new Float32Array(ch0.length);
+    for(let i = 0; i < mono.length; i++) mono[i] = (ch0[i] + ch1[i]) * 0.5;
+
+    const numFrames = Math.floor((mono.length - N) / HOP);
+    const freqPerBin = SR / N;
+
+    const bassLo = Math.round(40   / freqPerBin);
+    const bassHi = Math.round(180  / freqPerBin);
+    const midLo  = Math.round(500  / freqPerBin);
+    const midHi  = Math.round(3500 / freqPerBin);
+
+    const bassEnergy = new Float32Array(numFrames);
+    const midEnergy  = new Float32Array(numFrames);
+    const bassFlux   = new Float32Array(numFrames);
+    const midFlux    = new Float32Array(numFrames);
+    const prevBass   = new Float32Array(bassHi - bassLo + 1);
+    const prevMid    = new Float32Array(midHi  - midLo  + 1);
+    const re = new Float32Array(N);
+    const im = new Float32Array(N);
+
+    for(let f = 0; f < numFrames; f++){
+        const offset = f * HOP;
+        for(let i = 0; i < N; i++){ re[i] = mono[offset + i] * hann[i]; im[i] = 0; }
+        fft(re, im);
+
+        let bE = 0, bFlux = 0;
+        for(let k = bassLo; k <= bassHi; k++){
+            const mag = Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+            bE += mag;
+            bFlux += Math.max(0, mag - prevBass[k - bassLo]);
+            prevBass[k - bassLo] = mag;
+        }
+        bassEnergy[f] = bE / (bassHi - bassLo + 1);
+        bassFlux[f]   = bFlux / (bassHi - bassLo + 1);
+
+        let mE = 0, mFlux = 0;
+        for(let k = midLo; k <= midHi; k++){
+            const mag = Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+            mE += mag;
+            mFlux += Math.max(0, mag - prevMid[k - midLo]);
+            prevMid[k - midLo] = mag;
+        }
+        midEnergy[f] = mE / (midHi - midLo + 1);
+        midFlux[f]   = mFlux / (midHi - midLo + 1);
+
+        if(f % 2000 === 0) onProgress(0.1 + (f / numFrames) * 0.7);
+    }
+    onProgress(0.82);
+
+    const sBassFlux  = medianSmooth(bassFlux,  3);
+    const sMidEnergy = medianSmooth(midEnergy, 25);
+    const sMidFlux   = medianSmooth(midFlux,   10);
+
+    // ---- BEAT DETECTION ----
+    // Running sum for O(n) adaptive threshold over 1.5s window
+    // minBeatGap 0.38s → ~20% fewer balls vs 0.30s
+    const beatCtxF   = Math.round(1.5 * SR / HOP);
+    const minBeatGap = Math.round(0.42 * SR / HOP);
+    const events = [];
+    let lastBeatF = -9999;
+    let runSum = 0;
+    const runBuf = [];
+
+    for(let f = 0; f < numFrames; f++){
+        runBuf.push(sBassFlux[f]);
+        runSum += sBassFlux[f];
+        if(runBuf.length > beatCtxF){ runSum -= runBuf.shift(); }
+        if(f < beatCtxF) continue;
+
+        const localMean = runSum / runBuf.length;
+        // 1.7x local mean — stricter than before, fewer false positives on guitar
+        if(sBassFlux[f] > localMean * 1.9 && sBassFlux[f] > 0.0003 && f - lastBeatF > minBeatGap){
+            lastBeatF = f;
+            events.push({ time: f * HOP / SR + 0.02, type: 'beat' }); // +20ms perceptual shift
+        }
+    }
+    onProgress(0.88);
+
+    // ---- HOLD DETECTION ----
+    // Key insight: use flux/energy RATIO, not raw flux.
+    // Sustained vocal has energy but low ratio (stable spectrum).
+    // Attacking guitar has high ratio (spectrum changes a lot).
+    const midEAvg    = arrAvg(sMidEnergy);
+    const holdMinF   = Math.round(1.2 * SR / HOP);
+    const holdMergeF = Math.round(0.5 * SR / HOP);
+    const beatFrameSet = new Set(events.map(e => Math.round(e.time * SR / HOP)));
+
+    const midRatio = new Float32Array(numFrames);
+    for(let f = 0; f < numFrames; f++){
+        midRatio[f] = sMidEnergy[f] > 0.0001 ? sMidFlux[f] / sMidEnergy[f] : 999;
+    }
+    const sMidRatio = medianSmooth(midRatio, 8);
+    const ratioAvg  = arrAvg(sMidRatio);
+
+    let holdStart = -1;
+    const rawHolds = [];
+    const nearW = Math.round(0.12 * SR / HOP);
+
+    for(let f = 0; f < numFrames; f++){
+        let nearBeat = false;
+        for(let k = Math.max(0, f - nearW); k <= Math.min(numFrames-1, f + nearW); k++)
+            if(beatFrameSet.has(k)){ nearBeat = true; break; }
+
+        // Sustained = energy above average + ratio below average + no nearby beat
+        const isSustained = sMidEnergy[f] > midEAvg * 1.05
+                         && sMidRatio[f]  < ratioAvg * 0.7
+                         && !nearBeat;
+
+        if(isSustained){
+            if(holdStart < 0) holdStart = f;
+        } else {
+            if(holdStart >= 0){
+                if(f - holdStart >= holdMinF) rawHolds.push({ startF: holdStart, endF: f });
+                holdStart = -1;
+            }
+        }
+    }
+
+    const mergedHolds = [];
+    for(const h of rawHolds){
+        const last = mergedHolds[mergedHolds.length - 1];
+        if(last && h.startF - last.endF < holdMergeF) last.endF = h.endF;
+        else mergedHolds.push({...h});
+    }
+    for(const h of mergedHolds){
+        events.push({ time: h.startF * HOP / SR, type: 'hold', duration: (h.endF - h.startF) * HOP / SR });
+    }
+
+    onProgress(0.95);
+    events.sort((a,b) => a.time - b.time);
+
+    const holds = events.filter(e => e.type === 'hold');
+    let beats = events.filter(e => {
+        if(e.type !== 'beat') return false;
+        return !holds.some(h => e.time >= h.time - 0.3 && e.time <= h.time + h.duration + 0.3);
+    });
+    beats = pruneDense(beats, 0.42);
+    if(beats.length < 6) beats = generateFallbackBeats(dur, holds);
+
+    // Compensate for FFT window center offset: detected beat is at frame center,
+    // actual transient is ~half-window earlier = N/2 samples = ~23ms
+    const fftOffset = (N / 2) / SR;
+    beats = beats.map(b => ({ ...b, time: Math.max(0, b.time - fftOffset) }));
+
+    onProgress(1.0);
+    console.log(`Chart: ${beats.length} beats, ${holds.length} holds`);
+    return [...beats, ...holds].sort((a,b) => a.time - b.time);
+}
+
+// Median-style smoothing (actually mean in window, but applied iteratively)
+function medianSmooth(arr, r) {
+    const out = new Float32Array(arr.length);
+    for(let i = 0; i < arr.length; i++){
+        let sum = 0, n = 0;
+        for(let k = Math.max(0,i-r); k <= Math.min(arr.length-1,i+r); k++){ sum+=arr[k]; n++; }
+        out[i] = sum / n;
+    }
+    return out;
+}
+
+function arrAvg(arr) {
+    let s = 0;
+    for(let i = 0; i < arr.length; i++) s += arr[i];
+    return s / arr.length;
+}
+
+// Remove beats closer than minGap seconds to each other
+function pruneDense(beats, minGap) {
+    const out = [];
+    let lastT = -999;
+    for(const b of beats){
+        if(b.time - lastT >= minGap){ out.push(b); lastT = b.time; }
+    }
+    return out;
+}
+
+function generateFallbackBeats(duration, holds) {
+    const interval = 0.5;
+    const result = [];
+    for(let t = 1.0; t < duration - 1; t += interval){
+        const inHold = holds.some(h => t >= h.time - 0.4 && t <= h.time + h.duration + 0.4);
+        if(!inHold) result.push({ time: t, type: 'beat' });
+    }
+    return result;
+}
+
+// ============================================================
+
+function stopAudio(){
+    if(progressTickId){clearInterval(progressTickId);progressTickId=null;}
+    try{if(sourceNode){sourceNode.onended=null;sourceNode.stop();}}catch(e){}
+    try{if(audioContext)audioContext.close();}catch(e){}
+    sourceNode=null;audioContext=null;analyser=null;
+}
+function restartGame(){document.getElementById('pause-overlay').style.display='none';loadAndPlay(selectedIndex);}
+function goToMenu(){
+    stopAudio();gameRunning=false;
+    if(animFrameId){cancelAnimationFrame(animFrameId);animFrameId=null;}
+    ctx.clearRect(0,0,W,H);
+    document.getElementById('pause-overlay').style.display='none';
+    document.getElementById('game-ui').style.display='none';
+    document.getElementById('menu').style.display='flex';
+    renderSongList();
+}
+function togglePause(){
+    if(!gameRunning)return;paused=!paused;
+    const icon=document.getElementById('sp-pause-icon');
+    if(paused){
+        audioContext.suspend();
+        document.getElementById('pause-overlay').style.display='flex';
+        icon.innerHTML='<path d="M8 5v14l11-7z"/>';
+    } else {
+        audioContext.resume();
+        document.getElementById('pause-overlay').style.display='none';
+        icon.innerHTML='<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        animFrameId=requestAnimationFrame(gameLoop);
+    }
+}
+function prevSong(){
+    if(!gameRunning)return;
+    const idx=(selectedIndex-1+songs.length)%songs.length;
+    selectedIndex=idx;loadAndPlay(idx);
+}
+function nextSong(){
+    if(!gameRunning)return;
+    const idx=(selectedIndex+1)%songs.length;
+    selectedIndex=idx;loadAndPlay(idx);
+}
+function openPicker(){
+    if(!gameRunning)return;
+    audioContext.suspend();paused=true;
+    document.getElementById('picker-list').innerHTML=songs.map((s,i)=>`
+        <div class="song-item ${i===selectedIndex?'selected':''}" onclick="pickSong(${i})">
+            <div class="song-cover">${coverHtml(s)}</div>
+            <div class="song-info"><div class="song-name">${s.name}</div></div>
+        </div>`).join('');
+    document.getElementById('picker').style.display='flex';
+}
+function closePicker(){
+    document.getElementById('picker').style.display='none';
+    if(paused){paused=false;audioContext.resume();animFrameId=requestAnimationFrame(gameLoop);}
+}
+function pickSong(i){document.getElementById('picker').style.display='none';paused=false;selectedIndex=i;loadAndPlay(i);}
+
+// ---- TOUCH ----
+canvas.addEventListener('touchmove',(e)=>{e.preventDefault();touchX=e.touches[0].clientX;},{passive:false});
+canvas.addEventListener('touchstart',(e)=>{touchX=e.touches[0].clientX;});
+window.addEventListener('mousemove',(e)=>{touchX=e.clientX;});
+
+// arrivalTime = when crystal reaches player (= beat time)
+// crystal starts at top exactly FALL_TIME seconds before arrival
+function scheduleCrystal(arrivalTime){
+    const x = 30 + Math.random() * (W - 60);
+    const size = 14 + Math.random() * 10;
+    const color = palette.crystals[Math.floor(Math.random() * palette.crystals.length)];
+    crystals.push({ x, size, color, arrivalTime, collected:false, missed:false, missedLogged:false });
+}
+
+// holdStartTime = when hold begins in audio time
+// holdDuration = seconds the hold lasts
+function scheduleHoldLine(holdStartTime, holdDuration){
+    // The hold line scrolls in from bottom, similar to how crystals fall
+    // We draw a horizontal path the player must follow
+    holdLines.push({
+        startTime: holdStartTime,
+        endTime: holdStartTime + holdDuration,
+        duration: holdDuration,
+        // path: generate a gentle wavy horizontal path
+        // represented as array of x-positions at equal time intervals
+        pathPoints: generateHoldPath(holdDuration),
+        scored: false,
+        active: false,
+        hit: false,
+    });
+}
+
+function generateHoldPath(duration){
+    // Generate smooth curved path across the screen
+    const numPoints = Math.max(10, Math.floor(duration * 8));
+    const points = [];
+    // Random but smooth waypoints
+    let x = 0.2 + Math.random() * 0.6; // 0-1 normalized
+    points.push(x);
+    for(let i = 1; i < numPoints; i++){
+        x += (Math.random() - 0.5) * 0.25;
+        x = Math.max(0.1, Math.min(0.9, x));
+        points.push(x);
+    }
+    // Smooth it
+    const smoothed = [];
+    for(let i = 0; i < points.length; i++){
+        let s = 0, cnt = 0;
+        for(let k = Math.max(0,i-2); k <= Math.min(points.length-1, i+2); k++){
+            s += points[k]; cnt++;
+        }
+        smoothed.push(s/cnt);
+    }
+    return smoothed;
+}
+
+function spawnParticles(x,y,color){
+    for(let i=0;i<24;i++){
+        const angle=Math.random()*Math.PI*2,spd=2+Math.random()*7;
+        const size=3+Math.random()*6;
+        particles.push({x,y,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd,life:1,color,size});
+    }
+}
+function spawnShockwave(x,y,color){
+    shockwaves.push({x,y,r:0,maxR:90,life:1,color});
+    // second smaller ring
+    shockwaves.push({x,y,r:0,maxR:55,life:1,color:'#ffffff',delay:0.08,born:performance.now()});
+}
+function spawnScorePopup(x,y,pts,combo){
+    const text = combo>1 ? `+${pts} ×${combo}` : `+${pts}`;
+    scorePopups.push({x,y,text,life:1,vy:-2.5});
+}
+
+function fmtTime(s){
+    const m=Math.floor(s/60),sec=Math.floor(s%60);
+    return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+// ---- LYRICS ----
+function parseLrc(lrcStr){
+    const lines = lrcStr.split('\n');
+    const result = [];
+    const re = /\[(\d+):(\d+\.\d+)\](.*)/;
+    for(const line of lines){
+        const m = line.match(re);
+        if(m){
+            const time = parseInt(m[1])*60 + parseFloat(m[2]);
+            const text = m[3].trim();
+            if(text) result.push({time, text});
+        }
+    }
+    return result.sort((a,b)=>a.time-b.time);
+}
+
+async function fetchLyrics(artist, title){
+    lyrics = [];
+    currentLyricIdx = -1;
+    if(!artist || !title) return;
+    try {
+        const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
+        const res = await fetch(url);
+        if(!res.ok) return;
+        const data = await res.json();
+        if(data.syncedLyrics) {
+            lyrics = parseLrc(data.syncedLyrics);
+        }
+    } catch(e) { /* no lyrics, fine */ }
+}
+function updateProgress(){
+    if(!audioContext||paused)return;
+    const elapsed=audioContext.currentTime-audioStartTime;
+    const pct=audioDuration>0?Math.min(elapsed/audioDuration,1)*100:0;
+    document.getElementById('sp-bar-fill').style.width=pct+'%';
+    document.getElementById('sp-current').textContent=fmtTime(Math.min(elapsed,audioDuration));
+}
+
+// ---- GAME LOOP ----
+function gameLoop(){
+    if(!gameRunning||paused)return;
+
+    analyser.getByteFrequencyData(dataArray);
+    const now=audioContext.currentTime - audioStartTime; // song time in seconds
+    const absNow = audioContext.currentTime;
+    const bass=dataArray.slice(0,12).reduce((a,b)=>a+b,0)/12;
+    energy=bass;
+
+    // ---- SPAWN FROM CHART ----
+    // now = song time elapsed (audioContext.currentTime - audioStartTime)
+    while(chartIndex < gameChart.length){
+        const ev = gameChart[chartIndex];
+        // We want to spawn the object FALL_TIME before it should arrive at player
+        const spawnAt = ev.time - FALL_TIME;
+        if(now < spawnAt) break; // not time yet
+
+        if(ev.type === 'beat'){
+            scheduleCrystal(ev.time);
+        } else if(ev.type === 'hold'){
+            scheduleHoldLine(ev.time, ev.duration);
+        }
+        chartIndex++;
+    }
+
+    player.x+=(touchX-player.x)*0.18;
+    player.x=Math.max(player.size,Math.min(W-player.size,player.x));
+    playerScale+=(1-playerScale)*0.2;
+    flashAlpha*=0.82;
+
+    const pulse=energy/255;
+
+    // BG
+    ctx.fillStyle=palette.bg;
+    ctx.fillRect(0,0,W,H);
+
+    // Hold glow BG when hold active
+    if(activeHold){
+        const holdProgress = (now - activeHold.startTime) / activeHold.duration;
+        const glowAlpha = 0.08 + Math.sin(holdProgress * Math.PI * 4) * 0.04;
+        ctx.fillStyle=`rgba(${hexToRgb(palette.player)},${glowAlpha})`;
+        ctx.fillRect(0,0,W,H);
+    }
+
+    if(pulse>0.15){
+        ctx.fillStyle=`rgba(${hexToRgb(palette.player)},${pulse*0.07})`;
+        ctx.fillRect(0,0,W,H);
+    }
+    if(flashAlpha>0.01){
+        ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
+        ctx.fillRect(0,0,W,H);
+    }
+
+    // ---- LYRICS ----
+    if(lyrics.length > 0){
+        const elapsed = now;
+
+        let newIdx = -1;
+        for(let i = 0; i < lyrics.length; i++){
+            if(lyrics[i].time <= elapsed) newIdx = i;
+            else break;
+        }
+        if(newIdx !== currentLyricIdx){
+            currentLyricIdx = newIdx;
+            lyricTransition = 0;
+        }
+        lyricTransition = Math.min(1, lyricTransition + 0.05);
+
+        const PAD = 28;
+        const FONT_SIZE = 28;
+        const LINE_H = FONT_SIZE * 1.55;
+        const MAX_W = W - PAD * 2;
+        const ANCHOR_Y = H * 0.52;
+
+        ctx.font = `700 ${FONT_SIZE}px 'DM Sans', sans-serif`;
+
+        function wrapText(text, maxW){
+            const words = text.split(' ');
+            const lines = [];
+            let cur = '';
+            for(const w of words){
+                const test = cur ? cur + ' ' + w : w;
+                if(ctx.measureText(test).width <= maxW){ cur = test; }
+                else { if(cur) lines.push(cur); cur = w; }
+            }
+            if(cur) lines.push(cur);
+            return lines.length ? lines : [text];
+        }
+
+        const SHOW_PAST = 6;
+        const SHOW_FUTURE = 6;
+        let layout = [];
+
+        if(currentLyricIdx >= 0){
+            const wrapped = wrapText(lyrics[currentLyricIdx].text, MAX_W);
+            layout.push({idx: currentLyricIdx, wrapped, yTop: ANCHOR_Y});
+
+            let y = ANCHOR_Y + wrapped.length * LINE_H + LINE_H * 0.4;
+            for(let i = currentLyricIdx + 1; i <= currentLyricIdx + SHOW_FUTURE && i < lyrics.length; i++){
+                const w = wrapText(lyrics[i].text, MAX_W);
+                layout.push({idx: i, wrapped: w, yTop: y});
+                y += w.length * LINE_H + LINE_H * 0.4;
+            }
+
+            let yUp = ANCHOR_Y;
+            for(let i = currentLyricIdx - 1; i >= Math.max(0, currentLyricIdx - SHOW_PAST); i--){
+                const w = wrapText(lyrics[i].text, MAX_W);
+                yUp -= w.length * LINE_H + LINE_H * 0.4;
+                layout.push({idx: i, wrapped: w, yTop: yUp});
+            }
+        } else {
+            let y = ANCHOR_Y;
+            for(let i = 0; i < Math.min(SHOW_FUTURE, lyrics.length); i++){
+                const w = wrapText(lyrics[i].text, MAX_W);
+                layout.push({idx: i, wrapped: w, yTop: y});
+                y += w.length * LINE_H + LINE_H * 0.4;
+            }
+        }
+
+        for(const item of layout){
+            const {idx, wrapped, yTop} = item;
+            const isCurrent = idx === currentLyricIdx;
+            const isPast = idx < currentLyricIdx;
+
+            if(yTop > H + 100 || yTop + wrapped.length * LINE_H < -60) continue;
+
+            let alpha;
+            if(isCurrent)      alpha = 0.95 * lyricTransition;
+            else if(isPast)    alpha = 0.28;
+            else               alpha = 0.28;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.font = `700 ${FONT_SIZE}px 'DM Sans', sans-serif`;
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+
+            for(let li = 0; li < wrapped.length; li++){
+                ctx.fillText(wrapped[li], PAD, yTop + li * LINE_H);
+            }
+            ctx.restore();
+        }
+    }
+
+    // ---- HOLD LINES ----
+    const nextHL = [];
+    for(let i = 0; i < holdLines.length; i++){
+        const hl = holdLines[i];
+
+        // Is this hold's window active?
+        if(now < hl.startTime - FALL_TIME) { nextHL.push(hl); continue; } // not started scrolling in yet
+        if(now > hl.endTime + 1.0) continue; // done, remove
+
+        const progress = (now - hl.startTime) / hl.duration; // -something to 1+
+        const isActive = now >= hl.startTime && now <= hl.endTime;
+
+        if(isActive && !activeHold){
+            activeHold = hl;
+            hl.active = true;
+            hl.hit = true; // track hits
+            // Show combo label
+            document.getElementById('combo-display').textContent = '〰️ hold!';
+        }
+        if(activeHold === hl && now > hl.endTime){
+            // Hold ended
+            const pts = 500;
+            score += pts;
+            document.getElementById('score-display').textContent = score;
+            document.getElementById('combo-display').textContent = `+${pts} hold!`;
+            combo++;
+            flashAlpha = 0.1;
+            playerScale = 1.8;
+            spawnParticles(player.x, player.y, palette.player);
+            spawnShockwave(player.x, player.y, palette.player);
+            activeHold = null;
+        }
+
+        // Draw the hold line — it scrolls from bottom to top as time progresses
+        // The line Y at song time T is: PLAYER_Y - (T - now) * (PLAYER_Y / FALL_TIME)
+        // Points at holdStartTime appear at PLAYER_Y, holdEndTime above it
+        ctx.save();
+
+        // Draw path as a ribbon
+        const color = palette.player;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = isActive ? 6 : 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = isActive ? 20 : 10;
+
+        const pts = hl.pathPoints;
+        ctx.beginPath();
+        let firstVisible = true;
+        for(let k = 0; k < pts.length; k++){
+            // Time of this point in song time
+            const pointTime = hl.startTime + (k / (pts.length - 1)) * hl.duration;
+            // Y position: scroll from bottom (player) to top
+            const yPos = PLAYER_Y - (pointTime - now) * (PLAYER_Y / FALL_TIME);
+            const xPos = pts[k] * (W - 60) + 30;
+
+            if(yPos < -40 || yPos > H + 40) continue;
+
+            if(firstVisible){ ctx.moveTo(xPos, yPos); firstVisible = false; }
+            else { ctx.lineTo(xPos, yPos); }
+        }
+        ctx.globalAlpha = isActive ? 0.95 : 0.6;
+        ctx.stroke();
+
+        // Draw dot at current player-hit point (at PLAYER_Y)
+        if(isActive){
+            const t = (now - hl.startTime) / hl.duration;
+            const idx = Math.min(Math.floor(t * (pts.length - 1)), pts.length - 1);
+            const targetX = pts[idx] * (W - 60) + 30;
+            // Show target indicator
+            ctx.beginPath();
+            ctx.arc(targetX, PLAYER_Y, 18, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 0.5 + Math.sin(now * 8) * 0.3;
+            ctx.stroke();
+
+            // Check if player is on the line
+            const dist = Math.abs(player.x - targetX);
+            if(dist < 60){
+                // Give continuous score
+                score += 1;
+                if(Math.round(now * 10) % 5 === 0) document.getElementById('score-display').textContent = score;
+                // Pull player gently toward line (guide)
+                // (optional: just visual feedback)
+            }
+        }
+
+        ctx.restore();
+        nextHL.push(hl);
+    }
+    holdLines = nextHL;
+
+    // ---- CRYSTALS ----
+    const nextC=[];
+    for(let i=0;i<crystals.length;i++){
+        const c=crystals[i];
+        if(c.collected||c.missed)continue;
+
+        const spawnTime=c.arrivalTime-FALL_TIME;
+        const progress=(now-spawnTime)/FALL_TIME;
+        if(progress<0){nextC.push(c);continue;}
+
+        const elapsed = now - spawnTime;
+        c.y = -c.size + (PLAYER_Y + c.size) * (elapsed / FALL_TIME);
+
+        if(c.y > canvas.height + 60) continue;
+
+        if(c.y > PLAYER_Y + c.size * 2 && !c.missedLogged){
+            c.missedLogged = true;
+            if(combo>0){combo=0;document.getElementById('combo-display').textContent='';}
+        }
+
+        if(!c.missedLogged){
+            const dx=c.x-player.x,dy=c.y-player.y;
+            if(Math.sqrt(dx*dx+dy*dy)<c.size+player.size){
+                c.collected=true;
+                combo++;
+                const pts = 100*Math.min(combo,10);
+                score+=pts;
+                document.getElementById('score-display').textContent=score;
+                document.getElementById('combo-display').textContent=combo>1?`${combo}x комбо!`:'';
+                spawnParticles(c.x,c.y,c.color);
+                spawnShockwave(c.x,c.y,c.color);
+                spawnScorePopup(c.x,c.y,pts,combo);
+                flashAlpha=0.06;playerScale=1.6;
+                continue;
+            }
+        }
+
+        const alpha = c.missedLogged ? 0.35 : 1;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(c.x,c.y,c.size,0,Math.PI*2);
+        ctx.fillStyle=c.color;
+        ctx.shadowColor=c.color;
+        ctx.shadowBlur=c.missedLogged?6:20;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(c.x,c.y,c.size*0.45,0,Math.PI*2);
+        ctx.fillStyle='rgba(255,255,255,0.85)';
+        ctx.shadowBlur=0;
+        ctx.fill();
+        ctx.restore();
+        nextC.push(c);
+    }
+    crystals=nextC;
+
+    // PARTICLES
+    const nextP=[];
+    for(let i=0;i<particles.length;i++){
+        const p=particles[i];
+        p.x+=p.vx;p.y+=p.vy;p.vx*=0.93;p.vy*=0.93;p.life-=0.035;
+        if(p.life<=0)continue;
+        ctx.save();
+        ctx.globalAlpha=p.life*p.life;
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,(p.size||5)*p.life,0,Math.PI*2);
+        ctx.fillStyle=p.color;
+        ctx.shadowColor=p.color;
+        ctx.shadowBlur=12;
+        ctx.fill();
+        ctx.restore();
+        nextP.push(p);
+    }
+    particles=nextP;
+
+    // SHOCKWAVES
+    const nextSW=[];
+    for(let i=0;i<shockwaves.length;i++){
+        const sw=shockwaves[i];
+        sw.r+=sw.maxR*0.07;
+        sw.life-=0.055;
+        if(sw.life<=0)continue;
+        ctx.save();
+        ctx.globalAlpha=sw.life*0.7;
+        ctx.beginPath();
+        ctx.arc(sw.x,sw.y,sw.r,0,Math.PI*2);
+        ctx.strokeStyle=sw.color;
+        ctx.lineWidth=3*sw.life;
+        ctx.shadowColor=sw.color;
+        ctx.shadowBlur=15;
+        ctx.stroke();
+        ctx.restore();
+        nextSW.push(sw);
+    }
+    shockwaves=nextSW;
+
+    // SCORE POPUPS
+    const nextSP=[];
+    for(let i=0;i<scorePopups.length;i++){
+        const sp=scorePopups[i];
+        sp.y+=sp.vy;sp.life-=0.025;
+        if(sp.life<=0)continue;
+        ctx.save();
+        ctx.globalAlpha=sp.life;
+        ctx.font=`bold ${18+Math.floor((1-sp.life)*6)}px -apple-system,sans-serif`;
+        ctx.fillStyle='#ffffff';
+        ctx.shadowColor='rgba(255,255,255,0.8)';
+        ctx.shadowBlur=10;
+        ctx.textAlign='center';
+        ctx.fillText(sp.text,sp.x,sp.y);
+        ctx.restore();
+        nextSP.push(sp);
+    }
+    scorePopups=nextSP;
+
+    // PLAYER
+    ctx.save();
+    ctx.translate(player.x,player.y);
+    ctx.scale(playerScale,playerScale);
+    // outer glow ring
+    ctx.beginPath();
+    ctx.arc(0,0,player.size*1.5,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(${hexToRgb(palette.player)},${0.15+pulse*0.4})`;
+    ctx.lineWidth=3;
+    ctx.shadowColor=palette.player;
+    ctx.shadowBlur=20+pulse*30;
+    ctx.stroke();
+    // core — square normally, but during hold it pulses more
+    ctx.shadowColor=palette.player;
+    ctx.shadowBlur=18+pulse*35 + (activeHold ? Math.sin(now*10)*15 : 0);
+    ctx.fillStyle=palette.player;
+    const s=player.size;
+    ctx.fillRect(-s/2,-s/2,s,s);
+    // highlight
+    ctx.fillStyle='rgba(255,255,255,0.25)';
+    ctx.shadowBlur=0;
+    ctx.fillRect(-s/2,-s/2,s/2,s/2);
+    ctx.restore();
+
+    animFrameId=requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>

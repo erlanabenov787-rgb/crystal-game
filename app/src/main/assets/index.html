@@ -1,0 +1,1980 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Crystal Beat</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; overflow: hidden; font-family: 'DM Sans', -apple-system, sans-serif; color: white; }
+        canvas { display: block; position: fixed; top: 0; left: 0; z-index: 0; }
+        #menu { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0a0a0a; padding: 30px 20px; }
+        #menu h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 6px; }
+        #menu p { font-size: 14px; opacity: 0.4; margin-bottom: 30px; }
+        #song-list { width: 100%; max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        .song-item { background: #1a1a1a; border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; cursor: pointer; border: 2px solid transparent; }
+        .song-item.selected { border-color: #1db954; }
+        .song-cover { width: 44px; height: 44px; border-radius: 8px; background: #333; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; overflow: hidden; }
+        .song-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .song-info { flex: 1; min-width: 0; }
+        .song-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .song-sub { font-size: 12px; opacity: 0.4; margin-top: 2px; }
+        .delete-btn { font-size: 18px; opacity: 0.3; padding: 4px 8px; }
+        #empty-state { text-align: center; opacity: 0.3; padding: 30px; font-size: 14px; }
+        .btn-add { width: 100%; padding: 16px; border-radius: 14px; background: #1a1a1a; border: 2px dashed #333; color: white; font-size: 15px; cursor: pointer; margin-bottom: 12px; }
+        .btn-play { width: 100%; padding: 18px; border-radius: 14px; background: #1db954; border: none; color: white; font-size: 17px; font-weight: 700; cursor: pointer; }
+        .btn-play:disabled { background: #333; color: #555; }
+        #fileInput { display: none; }
+
+        /* GAME UI */
+        #game-ui { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: none; flex-direction: column; align-items: center; pointer-events: none; }
+
+        /* Spotify-style now playing bar */
+        #spotify-bar {
+            width: calc(100% - 24px);
+            margin: 52px 12px 0;
+            padding: 12px 14px 12px;
+            background: rgba(28, 28, 30, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 18px;
+            pointer-events: all;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        #sp-top { display: flex; align-items: center; gap: 12px; }
+        #sp-art {
+            width: 52px; height: 52px;
+            border-radius: 8px;
+            background: #222;
+            flex-shrink: 0;
+            overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+        }
+        #sp-art img { width: 100%; height: 100%; object-fit: cover; }
+        #sp-info { flex: 1; min-width: 0; cursor: pointer; }
+        #sp-title {
+            font-size: 15px; font-weight: 700;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            letter-spacing: -0.2px;
+        }
+        #sp-artist { font-size: 13px; opacity: 0.55; margin-top: 2px; font-weight: 400; }
+        #sp-btns { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+        .sp-btn {
+            background: rgba(255,255,255,0.08);
+            border: none; color: white;
+            width: 34px; height: 34px;
+            border-radius: 50%;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s;
+        }
+        .sp-btn:active { background: rgba(255,255,255,0.2); }
+        .sp-btn svg { width: 16px; height: 16px; fill: white; }
+
+        /* Progress bar */
+        #sp-progress { display: flex; flex-direction: column; gap: 4px; }
+        #sp-bar-track {
+            width: 100%; height: 4px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            cursor: pointer;
+            position: relative;
+            padding: 10px 0; /* bigger touch area */
+            margin: -10px 0;
+            box-sizing: content-box;
+        }
+        #sp-bar-fill {
+            height: 4px; border-radius: 2px;
+            background: white;
+            width: 0%;
+            pointer-events: none;
+        }
+        #analysis-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 20px;
+            letter-spacing: 0.3px;
+        }
+        #analysis-badge.spotify { background: rgba(29,185,84,0.2); color: #1db954; }
+        #analysis-badge.fft { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.4); }
+
+        /* Score row */
+        #score-row { display: flex; flex-direction: column; align-items: center; margin-top: 6px; pointer-events: none; }
+        #score-display { font-size: 30px; font-weight: 800; letter-spacing: -1px; }
+        #combo-display { font-size: 13px; opacity: 0.6; margin-top: 1px; min-height: 18px; font-weight: 600; }
+
+        #picker { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.92); display: none; flex-direction: column; padding: 30px 20px; }
+        #picker h2 { font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+        #picker-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        #picker-close { margin-top: 16px; width: 100%; padding: 16px; border-radius: 14px; background: #1a1a1a; border: none; color: white; font-size: 15px; cursor: pointer; }
+        #analyze-overlay { position: fixed; inset: 0; z-index: 25; background: #0a0a0a; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+        #analyze-overlay h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+        #analyze-overlay p { font-size: 14px; opacity: 0.45; }
+        #analyze-bar-track { width: 220px; height: 3px; background: rgba(255,255,255,0.12); border-radius: 2px; margin-top: 8px; }
+        #analyze-bar-fill { height: 100%; width: 0%; background: #1db954; border-radius: 2px; transition: width 0.2s; }
+        #pause-overlay { position: fixed; inset: 0; z-index: 15; background: rgba(0,0,0,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+        #pause-overlay h2 { font-size: 32px; font-weight: 800; }
+        .pause-btn { width: 200px; padding: 16px; border-radius: 14px; border: none; color: white; font-size: 16px; font-weight: 600; cursor: pointer; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="menu">
+    <h1>Crystal Beat</h1>
+    <p>музыка × ритм × кристаллы</p>
+    <div id="song-list"><div id="empty-state">🎵 Добавь песни чтобы начать</div></div>
+    <input type="file" id="fileInput" accept="audio/*" multiple>
+    <button class="btn-add" onclick="document.getElementById('fileInput').click()">+ Добавить песни</button>
+    <div style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:#1a1a1a;border-radius:14px;margin-bottom:12px;cursor:pointer;" onclick="toggleSpotify()">
+        <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;">🎵 Spotify анализ</div>
+            <div style="font-size:12px;opacity:0.45;margin-top:2px;">точные биты, но медленнее загрузка</div>
+        </div>
+        <div id="spotify-toggle" style="width:44px;height:26px;border-radius:13px;background:#333;position:relative;transition:background 0.2s;">
+            <div id="spotify-toggle-knob" style="width:22px;height:22px;border-radius:50%;background:white;position:absolute;top:2px;left:2px;transition:left 0.2s;"></div>
+        </div>
+    </div>
+    <button class="btn-play" id="playBtn" disabled onclick="startGame()">▶ Играть</button>
+</div>
+
+<div id="game-ui">
+    <div id="spotify-bar">
+        <div id="sp-top">
+            <div id="sp-art">🎵</div>
+            <div id="sp-info" onclick="openPicker()">
+                <div id="sp-title-row" style="display:flex;align-items:center;gap:6px;">
+                    <div id="sp-title">—</div>
+                    <div id="sp-badge" style="display:none;background:#1db954;color:#000;font-size:10px;font-weight:800;padding:2px 6px;border-radius:6px;flex-shrink:0;">SPOTIFY</div>
+                </div>
+                <div id="sp-artist">нажми чтобы сменить</div>
+            </div>
+            <div id="sp-btns">
+                <button class="sp-btn" onclick="prevSong()" title="Предыдущая">
+                    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+                </button>
+                <button class="sp-btn" id="sp-pause-btn" onclick="togglePause()" title="Пауза">
+                    <svg id="sp-pause-icon" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+                <button class="sp-btn" onclick="nextSong()" title="Следующая">
+                    <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg>
+                </button>
+                <button class="sp-btn" onclick="restartGame()" title="Заново">
+                    <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div id="sp-progress">
+            <div id="sp-bar-track" onpointerdown="seekStart(event)" ontouchmove="seekMove(event)" onpointermove="seekMove(event)" onpointerup="seekEnd(event)" style="touch-action:none;">
+                <div id="sp-bar-fill"></div>
+                <div id="sp-bar-thumb" style="position:absolute;top:50%;right:auto;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:white;margin-left:-6px;left:0%;opacity:0;transition:opacity 0.15s;pointer-events:none;"></div>
+            </div>
+            <div id="sp-times">
+                <span id="sp-current">0:00</span>
+                <span id="sp-total">0:00</span>
+            </div>
+        </div>
+    </div>
+    <div id="score-row">
+        <div id="score-display">0</div>
+        <div id="combo-display"></div>
+    </div>
+</div>
+
+<div id="picker">
+    <h2>Выбери песню</h2>
+    <div id="picker-list"></div>
+    <button id="picker-close" onclick="closePicker()">Закрыть</button>
+</div>
+
+<div id="analyze-overlay">
+    <h2 id="analyze-label">🔍 Анализируем трек...</h2>
+    <p>подожди немного</p>
+    <div id="analyze-bar-track"><div id="analyze-bar-fill"></div></div>
+</div>
+
+<div id="pause-overlay">
+    <h2>Пауза</h2>
+    <button class="pause-btn" style="background:#1db954" onclick="togglePause()">Продолжить</button>
+    <button class="pause-btn" style="background:#1a1a1a" onclick="restartGame()">Заново</button>
+    <button class="pause-btn" style="background:#1a1a1a" onclick="goToMenu()">Меню</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const DPR = window.devicePixelRatio || 1;
+canvas.width = window.innerWidth * DPR;
+canvas.height = window.innerHeight * DPR;
+canvas.style.width = window.innerWidth + 'px';
+canvas.style.height = window.innerHeight + 'px';
+ctx.scale(DPR, DPR);
+const W = window.innerWidth;
+const H = window.innerHeight;
+
+// Crystal falls from y=0 to PLAYER_Y in exactly FALL_TIME seconds
+const FALL_TIME = 1.5; // slightly tighter — reduces perceived latency
+const PLAYER_Y = H - 120;
+
+let songs = [], selectedIndex = -1;
+let score = 0, combo = 0;
+let crystals = [], particles = [], shockwaves = [], scorePopups = [], waveFlashes = [];
+let holdLines = []; // hold segments
+let flashAlpha = 0, playerScale = 1;
+let screenShake = 0, aberration = 0;
+let player = { x: W / 2, y: PLAYER_Y, size: 36 };
+let gameRunning = false, paused = false;
+let audioContext, analyser, sourceNode, dataArray;
+let audioDuration = 0, audioStartTime = 0;
+let animFrameId = null, progressTickId = null;
+let touchX = W / 2;
+let energy = 0;
+
+// Pre-analyzed chart
+let gameChart = []; // [{time, type:'beat'|'hold', duration?}]
+let chartIndex = 0; // next event to spawn
+
+// Active hold
+let activeHold = null; // {startTime, endTime, path:[{x,y}], playerOnLine, scored}
+
+let palette = { bg: '#0a0a0a', player: '#1db954', crystals: ['#a78bfa', '#60a5fa'] };
+
+// ---- COLOR SYSTEM ----
+// basePalette  — extracted from cover, never mutated after set
+// currentPalette — what we lerp toward
+// palette — actual rendered values, lerps toward currentPalette each frame
+// Priority: 1) uuu  2) LRC section break  3) 30s fallback  4) nothing
+let basePalette      = null; // set by extractColors
+let currentPalette   = null; // target we're lerping toward (points to palettesByMoment[...])
+let palettesByMoment = { normal:null, chorus:null, quiet:null, alt:null };
+
+// track which palette is active so 30s cycling doesn't break on object copies
+let currentPaletteKey = 'normal';
+
+let lyricsLoaded     = false;
+let lastFallbackTime = 0;
+let edgeGlowAlpha    = 0;
+let hihatEnergy      = 0;
+let beatTimestamps   = [];
+
+// Set currentPalette through the ONE central function
+function setPalette(pal, instant=false, key=null){
+    currentPalette = pal;
+    if(key) currentPaletteKey = key;
+    if(instant){
+        palette.bg      = pal.bg;
+        palette.player  = pal.player;
+        palette.crystals= [...pal.crystals];
+    }
+}
+
+// Called every frame — lerps palette → currentPalette
+function tickPalette(){
+    if(!currentPalette) return;
+    const t = 0.025;
+    palette.bg       = lerpColor(palette.bg,      currentPalette.bg,      t);
+    palette.player   = lerpColor(palette.player,   currentPalette.player,  t);
+    palette.crystals = [
+        lerpColor(palette.crystals[0], currentPalette.crystals[0], t),
+        lerpColor(palette.crystals[1], currentPalette.crystals[1], t),
+    ];
+}
+
+// Shift basePalette hue for fallback (no lyrics)
+function shiftPaletteSoft(){
+    if(!basePalette) return;
+    // rotate through moment palettes in order
+    const order = ['normal','chorus','quiet','alt'];
+    const cur = Math.max(0, order.indexOf(currentPaletteKey));
+    const nextKey = order[(cur+1)%order.length];
+    const next = palettesByMoment[nextKey];
+    if(next) setPalette(next, false, nextKey);
+}
+
+let useSpotify = false;
+function toggleSpotify(){
+    useSpotify = !useSpotify;
+    const tog  = document.getElementById('spotify-toggle');
+    const knob = document.getElementById('spotify-toggle-knob');
+    tog.style.background  = useSpotify ? '#1db954' : '#333';
+    knob.style.left       = useSpotify ? '20px' : '2px';
+}
+
+// ---- LYRICS ----
+let lyrics = [];
+let sectionBreaks = []; // timestamps of empty lines in LRC
+let currentLyricIdx = -1;
+let lyricTransition = 0;
+
+// ---- COLORS ----
+function hexToRgb(hex) {
+    return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+}
+function hexToRgbArr(hex) {
+    return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+}
+function rgbToHex(r,g,b) {
+    return '#'+[r,g,b].map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
+}
+function lerpColor(a,b,t) {
+    const ra=hexToRgbArr(a),rb=hexToRgbArr(b);
+    return rgbToHex(ra[0]+(rb[0]-ra[0])*t,ra[1]+(rb[1]-ra[1])*t,ra[2]+(rb[2]-ra[2])*t);
+}
+
+// ---- EXTRACT COLORS — original v9-3 logic, extended to 8 colors ----
+function extractColors(img, songIdx=null) {
+    // Extract ONLY 4 distinct colors from the cover:
+    // 0 = background, 1 = player, 2-3 = crystals
+    const sz=64, oc=document.createElement('canvas');
+    oc.width=sz; oc.height=sz;
+    const c=oc.getContext('2d'); c.drawImage(img,0,0,sz,sz);
+    const d=c.getImageData(0,0,sz,sz).data;
+
+    const buckets={};
+    for(let i=0;i<d.length;i+=16){
+        const r=Math.round(d[i]/32)*32, g=Math.round(d[i+1]/32)*32, b=Math.round(d[i+2]/32)*32;
+        const k=`${r},${g},${b}`; buckets[k]=(buckets[k]||0)+1;
+    }
+
+    const sorted=Object.entries(buckets)
+        .sort((a,b)=>b[1]-a[1])
+        .map(e=>e[0].split(',').map(Number));
+
+    const picked=[];
+    for(const col of sorted){
+        if(picked.length>=4) break;
+        const dist = 55; // keep them meaningfully different
+        if(!picked.some(ex=>Math.abs(ex[0]-col[0])<dist && Math.abs(ex[1]-col[1])<dist && Math.abs(ex[2]-col[2])<dist)){
+            picked.push(col);
+        }
+    }
+    while(picked.length<4) picked.push([200,200,255]);
+
+    const toHex=([r,g,b])=>'#'+[r,g,b].map(v=>Math.min(255,v).toString(16).padStart(2,'0')).join('');
+
+    const c0 = toHex(picked[0]);
+    const c1 = toHex(picked[1]);
+    const c2 = toHex(picked[2]);
+    const c3 = toHex(picked[3]);
+
+    // Remember extracted 4 colors per-song (so loadAndPlay doesn't accidentally revert)
+    if(songIdx!==null && songs[songIdx]){
+        songs[songIdx].palette4 = [c0,c1,c2,c3];
+    }
+
+    // Base palette (normal): direct colors, NO darkening
+    palettesByMoment = {
+        normal: { bg:c0, player:c1, crystals:[c2,c3] },
+        // Swap ONLY these 4 colors between roles
+        chorus: { bg:c1, player:c2, crystals:[c3,c0] },
+        quiet:  { bg:c0, player:c3, crystals:[c2,c1] },
+        alt:    { bg:c2, player:c0, crystals:[c1,c3] },
+    };
+
+    // Set current palette state
+    palette.bg       = palettesByMoment.normal.bg;
+    palette.player   = palettesByMoment.normal.player;
+    palette.crystals = [...palettesByMoment.normal.crystals];
+
+    basePalette    = palettesByMoment.normal;
+    currentPalette = palettesByMoment.normal;
+    currentPaletteKey = 'normal';
+
+    // Instant set on load
+    setPalette(palettesByMoment.normal, true, 'normal');
+}
+function tryLoadCover(file,cb){
+    if(typeof jsmediatags==='undefined'){cb(null);return;}
+    jsmediatags.read(file,{
+        onSuccess(tag){
+            const t=tag.tags;
+            // store artist/title back on matching song
+            const idx=songs.findIndex(s=>s.file===file);
+            if(idx>=0){
+                if(t.artist) songs[idx].artist=t.artist;
+                if(t.title)  songs[idx].name=t.title;
+            }
+            const pic=t.picture;
+            if(!pic){cb(null);return;}
+            const b64=btoa(new Uint8Array(pic.data).reduce((d,b)=>d+String.fromCharCode(b),''));
+            const img=new Image();
+            img.onload=()=>{extractColors(img, idx);cb(img.src);};
+            img.onerror=()=>cb(null);
+            img.src=`data:${pic.format};base64,${b64}`;
+        },
+        onError(){cb(null);}
+    });
+}
+
+// iTunes cover fallback (no auth needed)
+async function fetchOnlineCover(artist, title){
+    try{
+        const q=encodeURIComponent(`${artist||''} ${title||''}`.trim());
+        if(!q)return null;
+        const res=await fetch(`https://itunes.apple.com/search?term=${q}&entity=song&limit=1`);
+        const data=await res.json();
+        if(data.results&&data.results.length>0){
+            const url = data.results[0].artworkUrl100.replace('100x100bb','600x600bb');
+            return url;
+        }
+    }catch(e){}
+    return null;
+}
+
+// ---- SONG LIST ----
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+    // Android browsers (Mi Browser esp.) can be weird with multi-select.
+    // Always snapshot the FileList immediately.
+    const files = Array.from(e.target.files || []);
+    if(!files.length){ e.target.value=''; return; }
+
+    const startIdx = songs.length;
+
+    // Process sequentially (no forEach(async...)) for maximum mobile stability.
+    for(let fi=0; fi<files.length; fi++){
+        const file = files[fi];
+
+        // Smart filename parse: "Artist - Title.mp3" → split on first " - "
+        let rawName = file.name.replace(/\.[^/.]+$/,'');
+        let name = rawName, artist = '';
+        const dashIdx = rawName.indexOf(' - ');
+        if(dashIdx > 0){ artist = rawName.slice(0, dashIdx).trim(); name = rawName.slice(dashIdx+3).trim(); }
+
+        const idx = startIdx + fi;
+        songs.push({name,artist,file,coverUrl:null});
+
+        // Try embedded cover first, then iTunes
+        tryLoadCover(file,url=>{
+            if(url){
+                songs[idx].coverUrl=url;
+                renderSongList();
+            } else if(artist||name){
+                fetchOnlineCover(artist,name).then(iUrl=>{
+                    if(iUrl){
+                        songs[idx].coverUrl=iUrl;
+                        const img=new Image(); img.crossOrigin='Anonymous';
+                        img.onload=()=>{ try{ extractColors(img, idx); }catch(e){} };
+                        img.src=iUrl;
+                        renderSongList();
+                    }
+                });
+            }
+        });
+    }
+
+    if(selectedIndex===-1&&songs.length>0) selectedIndex=0;
+    renderSongList();
+    document.getElementById('playBtn').disabled=songs.length===0;
+
+    // Clear only after we captured the files.
+    e.target.value='';
+});
+
+function coverHtml(s){return s.coverUrl?`<img src="${s.coverUrl}">`:'🎵';}
+function renderSongList(){
+    const list=document.getElementById('song-list');
+    if(!songs.length){list.innerHTML='<div id="empty-state">🎵 Добавь песни чтобы начать</div>';return;}
+    list.innerHTML=songs.map((s,i)=>`
+        <div class="song-item ${i===selectedIndex?'selected':''}" onclick="selectSong(${i})">
+            <div class="song-cover">${coverHtml(s)}</div>
+            <div class="song-info"><div class="song-name">${s.name}</div><div class="song-sub">нажми чтобы выбрать</div></div>
+            <div class="delete-btn" onclick="deleteSong(event,${i})">✕</div>
+        </div>`).join('');
+}
+function selectSong(i){selectedIndex=i;renderSongList();}
+function deleteSong(e,i){
+    e.stopPropagation();songs.splice(i,1);
+    if(selectedIndex>=songs.length)selectedIndex=songs.length-1;
+    renderSongList();
+    document.getElementById('playBtn').disabled=songs.length===0;
+}
+
+// ---- GAME CONTROL ----
+function startGame(){
+    if(selectedIndex<0||!songs[selectedIndex])return;
+    document.getElementById('menu').style.display='none';
+    document.getElementById('game-ui').style.display='flex';
+    loadAndPlay(selectedIndex);
+}
+
+const SPOTIFY_SERVER = 'http://localhost:3000';
+
+// Try to get Spotify analysis, return null if unavailable
+async function fetchSpotifyAnalysis(artist, title) {
+    try {
+        // Search for track
+        const searchUrl = `${SPOTIFY_SERVER}/search?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
+        const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(4000) });
+        if (!searchRes.ok) return null;
+        const tracks = await searchRes.json();
+        if (!tracks.length) return null;
+
+        const trackId = tracks[0].id;
+        const cover = tracks[0].cover;
+
+        // Get audio analysis
+        const analysisRes = await fetch(`${SPOTIFY_SERVER}/analysis/${trackId}`, { signal: AbortSignal.timeout(8000) });
+        if (!analysisRes.ok) return null;
+        const analysis = await analysisRes.json();
+
+        return { analysis, cover, trackId };
+    } catch(e) {
+        return null; // server unavailable or timeout → fallback to FFT
+    }
+}
+
+// Build gameChart from Spotify audio analysis
+// Uses beats[], sections[], segments[] for rich mechanics
+function buildChartFromSpotify(analysis) {
+    const chart = [];
+    const { beats, sections, segments } = analysis;
+
+    if (!beats || !sections || !segments) return null;
+
+    // Map sections by time for quick lookup
+    // sections have: start, duration, loudness, tempo, key, mode, time_signature
+    const getSectionAt = (t) => sections.find(s => t >= s.start && t < s.start + s.duration) || sections[0];
+
+    // Determine chorus sections (loudest sections = chorus/bridge)
+    const avgLoudness = sections.reduce((s, x) => s + x.loudness, 0) / sections.length;
+    const isChorus = (s) => s.loudness > avgLoudness + 1.5;
+
+    // --- BEATS → crystals ---
+    // Filter by confidence, skip beats inside hold regions (added later)
+    const goodBeats = beats.filter(b => b.confidence > 0.5);
+
+    // --- SEGMENTS → holds ---
+    // Hold = segment with high loudness_max, low loudness_start (sustained, not attack)
+    // and duration > 1.5s, and timbre[1] (brightness) high (vocal characteristic)
+    const avgSegDur = segments.reduce((s, x) => s + x.duration, 0) / segments.length;
+
+    const holdCandidates = segments.filter(seg => {
+        if (seg.duration < 1.2) return false;
+        // Sustained = loudness doesn't drop much after attack
+        const sustain = seg.loudness_max - seg.loudness_end;
+        if (sustain > 8) return false; // drops off fast = not sustained
+        // Brightness (timbre[1]) high = vocal/pad-like
+        const brightness = seg.timbre ? seg.timbre[1] : 0;
+        return brightness > 20;
+    });
+
+    // Merge adjacent hold candidates
+    const holds = [];
+    let current = null;
+    for (const seg of holdCandidates) {
+        if (!current) { current = { start: seg.start, end: seg.start + seg.duration }; continue; }
+        if (seg.start - current.end < 0.3) {
+            current.end = seg.start + seg.duration;
+        } else {
+            if (current.end - current.start >= 1.2) holds.push(current);
+            current = { start: seg.start, end: seg.start + seg.duration };
+        }
+    }
+    if (current && current.end - current.start >= 1.2) holds.push(current);
+
+    // Add holds to chart
+    for (const h of holds) {
+        chart.push({ time: h.start, type: 'hold', duration: h.end - h.start });
+    }
+
+    // Add beats, skipping ones inside holds
+    for (const b of goodBeats) {
+        const inHold = holds.some(h => b.start >= h.start - 0.1 && b.start <= h.end + 0.1);
+        if (inHold) continue;
+
+        const section = getSectionAt(b.start);
+        const chorus = isChorus(section);
+
+        chart.push({
+            time: b.start,
+            type: 'beat',
+            chorus,                          // bigger/faster in chorus
+            confidence: b.confidence,
+        });
+    }
+
+    chart.sort((a, b) => a.time - b.time);
+    console.log(`Spotify chart: ${chart.filter(e=>e.type==='beat').length} beats, ${chart.filter(e=>e.type==='hold').length} holds`);
+    return chart;
+}
+
+async function loadAndPlay(index){
+    stopAudio();
+    if(animFrameId){cancelAnimationFrame(animFrameId);animFrameId=null;}
+    score=0;combo=0;crystals=[];particles=[];shockwaves=[];scorePopups=[];holdLines=[];activeHold=null;waveFlashes=[];
+    flashAlpha=0;playerScale=1;energy=0;screenShake=0;aberration=0;
+    lyricsLoaded=false;lastFallbackTime=0;
+    edgeGlowAlpha=0;beatTimestamps=[];sectionBreaks=[];
+    // Reset palette to defaults (will be overwritten by extractColors if cover loads)
+    palette={bg:'#0a0a0a',player:'#1db954',crystals:['#a78bfa','#60a5fa']};
+    basePalette=null;currentPalette=null;
+    gameChart=[];chartIndex=0;
+    paused=false;
+    palette={bg:'#0a0a0a',player:'#1db954',crystals:['#a78bfa','#60a5fa']};
+    document.getElementById('score-display').textContent='0';
+    document.getElementById('combo-display').textContent='';
+    document.getElementById('pause-overlay').style.display='none';
+
+    const song=songs[index];
+    lyrics=[]; currentLyricIdx=-1; lyricTransition=0;
+
+    // Spotify bar UI
+    document.getElementById('sp-title').textContent=song.name;
+    document.getElementById('sp-artist').textContent=song.artist||'нажми чтобы сменить';
+    const artEl=document.getElementById('sp-art');
+    artEl.innerHTML=song.coverUrl?`<img src="${song.coverUrl}">`:'🎵';
+
+    if(song.coverUrl){const img=new Image();img.crossOrigin="Anonymous";img.onload=()=>{try{extractColors(img, selectedIndex);}catch(e){}};img.src=song.coverUrl;}
+    else{tryLoadCover(song.file,url=>{
+        if(url){
+            song.coverUrl=url;
+            document.getElementById('sp-art').innerHTML=`<img src="${url}">`;
+            document.getElementById('sp-title').textContent=song.name;
+            document.getElementById('sp-artist').textContent=song.artist||'нажми чтобы сменить';
+            const img=new Image();img.crossOrigin="Anonymous";img.onload=()=>{try{extractColors(img, selectedIndex);}catch(e){}};img.src=url;
+            renderSongList();
+        }
+    });}
+
+    // Show analyze overlay ONLY when we truly need to analyze (first time / not cached)
+    const analyzeOverlay=document.getElementById('analyze-overlay');
+    const analyzeLabel=document.getElementById('analyze-label');
+    const analyzeFill=document.getElementById('analyze-bar-fill');
+
+    const needAnalyze = !song._cachedChart; // chart not ready yet
+    if(needAnalyze){
+        analyzeOverlay.style.display='flex';
+        analyzeLabel.textContent='🔍 Анализируем трек...';
+        analyzeFill.style.width='5%';
+    } else {
+        analyzeOverlay.style.display='none';
+        analyzeFill.style.width='0%';
+    }
+
+    // Reuse a single AudioContext for smooth transitions
+    if(!audioContext) audioContext = new AudioContext();
+    try{ if(audioContext.state==='suspended') await audioContext.resume(); }catch(e){}
+
+    // Decode audio (cache decoded buffer for near-instant next-track start)
+    let audioBuf = song._cachedAudioBuf;
+    if(!audioBuf){
+        const buf=await song.file.arrayBuffer();
+        audioBuf=await audioContext.decodeAudioData(buf.slice(0));
+        song._cachedAudioBuf = audioBuf;
+        song._cachedDuration = audioBuf.duration;
+    }
+    audioDuration = song._cachedDuration || audioBuf.duration;
+
+    if(needAnalyze){
+        analyzeFill.style.width='20%';
+    }
+
+    // Palette init for this song:
+    // - if we already extracted 4 colors for this track → use them immediately
+    // - otherwise use defaults (and extractColors will overwrite later if a cover arrives)
+    const fallback4 = ['#0a0a0a', '#1db954', '#a78bfa', '#60a5fa'];
+    const p4 = (song && song.palette4 && song.palette4.length===4) ? song.palette4 : fallback4;
+    palettesByMoment = {
+        normal: { bg:p4[0], player:p4[1], crystals:[p4[2],p4[3]] },
+        chorus: { bg:p4[1], player:p4[2], crystals:[p4[3],p4[0]] },
+        quiet:  { bg:p4[0], player:p4[3], crystals:[p4[2],p4[1]] },
+        alt:    { bg:p4[2], player:p4[0], crystals:[p4[1],p4[3]] },
+    };
+    basePalette = palettesByMoment.normal;
+    setPalette(palettesByMoment.normal, true, 'normal');
+
+    // If we already have a cached chart, use it instantly (no blocking overlay).
+    if(song._cachedChart){
+        gameChart = song._cachedChart;
+        const src = song._cachedChartSource || 'fft';
+        document.getElementById('sp-badge').style.display = (src === 'spotify') ? 'inline-block' : 'none';
+    } else {
+        // --- Try Spotify first (only if toggle enabled) ---
+        let spotifyOk = false;
+        if(useSpotify && song.artist && song.name){
+            if(needAnalyze) analyzeLabel.textContent='🎵 Ищем в Spotify...';
+            const sp = await fetchSpotifyAnalysis(song.artist, song.name);
+            if(sp){
+                if(needAnalyze) analyzeFill.style.width='70%';
+                if(needAnalyze) analyzeLabel.textContent='✅ Spotify анализ готов';
+
+                // Use Spotify cover if we don't have one
+                if(!song.coverUrl && sp.cover){
+                    song.coverUrl = sp.cover;
+                    document.getElementById('sp-art').innerHTML=`<img src="${sp.cover}">`;
+                    const img=new Image(); img.crossOrigin='Anonymous';
+                    img.onload=()=>{ try{ extractColors(img, selectedIndex); }catch(e){} };
+                    img.src=sp.cover;
+                }
+
+                const chart = buildChartFromSpotify(sp.analysis);
+                if(chart && chart.length > 4){
+                    gameChart = chart;
+                    spotifyOk = true;
+                    song.spotifyId = sp.trackId;
+
+                    // Cache Spotify chart too
+                    song._cachedChart = chart;
+                    song._cachedChartSource = 'spotify';
+                    song._cachedDuration = audioBuf.duration;
+
+                    document.getElementById('sp-badge').style.display='inline-block';
+                }
+            }
+        }
+
+        // --- Fallback: FFT analysis ---
+        if(!spotifyOk){
+            if(needAnalyze) analyzeLabel.textContent='🔍 Анализируем трек...';
+            document.getElementById('sp-badge').style.display='none';
+
+            gameChart = await analyzeTrack(audioBuf, (p) => {
+                if(needAnalyze) analyzeFill.style.width = (20 + p*75) + '%';
+            });
+
+            song._cachedChart = gameChart;
+            song._cachedChartSource = 'fft';
+            song._cachedDuration = audioBuf.duration;
+        }
+    }
+
+    if(needAnalyze){
+        analyzeFill.style.width='100%';
+        await new Promise(r=>setTimeout(r,200));
+        analyzeOverlay.style.display='none';
+    }
+
+    // Setup realtime analyser for visualizer
+    analyser=audioContext.createAnalyser();
+    analyser.fftSize=1024;
+    analyser.smoothingTimeConstant=0.75;
+    dataArray=new Uint8Array(analyser.frequencyBinCount);
+
+    sourceNode=audioContext.createBufferSource();
+    sourceNode.buffer=audioBuf;
+    _seekAudioBuf=audioBuf;
+    sourceNode.connect(analyser);
+    analyser.connect(audioContext.destination);
+    sourceNode.start();
+    audioStartTime=audioContext.currentTime;
+
+    fetchLyrics(song.artist, song.name);
+    document.getElementById('sp-total').textContent=fmtTime(audioDuration);
+    document.getElementById('sp-bar-fill').style.width='0%';
+    if(progressTickId) clearInterval(progressTickId);
+    progressTickId=setInterval(updateProgress,500);
+    sourceNode.onended=()=>{clearInterval(progressTickId);if(songs.length){selectedIndex=(selectedIndex+1)%songs.length;loadAndPlay(selectedIndex);}};
+
+    gameRunning=true;
+    animFrameId=requestAnimationFrame(gameLoop);
+
+    // Kick off background analysis for upcoming songs (does NOT affect playback)
+    preAnalyzeNextSongs(selectedIndex, 2);
+}
+
+
+// ---- BACKGROUND PRE-ANALYSIS (while music plays) ----
+let bgAnalyzing = false;
+
+// Pre-analyze next N songs' charts in the background so next track starts faster.
+// Stores result on song._cachedChart (chart only; cover colors handled separately).
+async function preAnalyzeNextSongs(fromIndex, count=2){
+    if(bgAnalyzing) return;
+    if(!songs || songs.length<2) return;
+
+    bgAnalyzing = true;
+    try{
+        for(let k=1;k<=count;k++){
+            const idx = (fromIndex + k) % songs.length;
+            const s = songs[idx];
+            if(!s || !s.file || s._cachedChart) continue;
+
+            // Small breather so we don't spike the main thread right on transitions
+            await new Promise(r=>setTimeout(r, 350));
+
+            // Decode + analyze chart (no UI overlay)
+            const ctx = audioContext || new AudioContext();
+            const buf = await s.file.arrayBuffer();
+            const audioBuf = await ctx.decodeAudioData(buf.slice(0));
+            s._cachedChart = await analyzeTrack(audioBuf, null);
+            s._cachedDuration = audioBuf.duration;
+        }
+    }catch(e){
+        console.warn('Background analysis failed:', e);
+    }finally{
+        bgAnalyzing = false;
+    }
+}
+
+// ---- OFFLINE TRACK ANALYSIS ----
+
+// ============================================================
+//  OFFLINE TRACK ANALYSIS — real FFT, band separation, adaptive thresholds
+// ============================================================
+
+// Cooley-Tukey in-place FFT (radix-2, power-of-2 size)
+function fft(re, im) {
+    const N = re.length;
+    // Bit-reversal permutation
+    for(let i = 1, j = 0; i < N; i++){
+        let bit = N >> 1;
+        for(; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if(i < j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; }
+    }
+    // FFT butterfly
+    for(let len = 2; len <= N; len <<= 1){
+        const ang = -2 * Math.PI / len;
+        const wRe = Math.cos(ang), wIm = Math.sin(ang);
+        for(let i = 0; i < N; i += len){
+            let curRe = 1, curIm = 0;
+            for(let j = 0; j < len/2; j++){
+                const uRe = re[i+j],          uIm = im[i+j];
+                const vRe = re[i+j+len/2]*curRe - im[i+j+len/2]*curIm;
+                const vIm = re[i+j+len/2]*curIm + im[i+j+len/2]*curRe;
+                re[i+j]         = uRe + vRe;  im[i+j]         = uIm + vIm;
+                re[i+j+len/2]   = uRe - vRe;  im[i+j+len/2]   = uIm - vIm;
+                const newRe = curRe*wRe - curIm*wIm;
+                curIm = curRe*wIm + curIm*wRe; curRe = newRe;
+            }
+        }
+    }
+}
+
+// Hann window to reduce spectral leakage
+function hannWindow(N) {
+    const w = new Float32Array(N);
+    for(let i = 0; i < N; i++) w[i] = 0.5 * (1 - Math.cos(2*Math.PI*i/(N-1)));
+    return w;
+}
+
+async function analyzeTrack(audioBuf, onProgress) {
+    const SR      = audioBuf.sampleRate;
+    const dur     = audioBuf.duration;
+    const N       = 2048;
+    const HOP     = 512;
+    const hann    = hannWindow(N);
+
+    // Mono mix
+    const ch0 = audioBuf.getChannelData(0);
+    const ch1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : ch0;
+    const mono = new Float32Array(ch0.length);
+    for(let i = 0; i < mono.length; i++) mono[i] = (ch0[i] + ch1[i]) * 0.5;
+
+    const numFrames = Math.floor((mono.length - N) / HOP);
+    const freqPerBin = SR / N;
+
+    const bassLo = Math.round(40   / freqPerBin);
+    const bassHi = Math.round(180  / freqPerBin);
+    const midLo  = Math.round(500  / freqPerBin);
+    const midHi  = Math.round(3500 / freqPerBin);
+    const hiLo   = Math.round(7000 / freqPerBin);
+    const hiHi   = Math.round(Math.min(16000, SR/2-1) / freqPerBin);
+
+    // Log-amplitude flux — detects transients in quiet sections much better than linear
+    const bassFluxLog = new Float32Array(numFrames);
+    const midEnergy   = new Float32Array(numFrames);
+    const midFlux     = new Float32Array(numFrames);
+    const prevBassLog = new Float32Array(bassHi - bassLo + 1);
+    const prevMidLog  = new Float32Array(midHi  - midLo  + 1);
+    const hiFluxLog   = new Float32Array(numFrames);
+    const prevHiLog   = new Float32Array(Math.max(1, hiHi - hiLo + 1));
+    const re = new Float32Array(N);
+    const im = new Float32Array(N);
+
+    for(let f = 0; f < numFrames; f++){
+        const offset = f * HOP;
+        for(let i = 0; i < N; i++){ re[i] = mono[offset + i] * hann[i]; im[i] = 0; }
+        fft(re, im);
+
+        // Bass: log-amplitude spectral flux (better sensitivity in quiet parts)
+        let bFluxLog = 0;
+        for(let k = bassLo; k <= bassHi; k++){
+            const mag    = Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+            const logMag = Math.log1p(mag * 500); // log-compress
+            const d      = Math.max(0, logMag - prevBassLog[k - bassLo]);
+            bFluxLog += d;
+            prevBassLog[k - bassLo] = logMag;
+        }
+        bassFluxLog[f] = bFluxLog / (bassHi - bassLo + 1);
+
+        // Mid: energy + log-flux for hold detection
+        let mE = 0, mFluxLog = 0;
+        for(let k = midLo; k <= midHi; k++){
+            const mag    = Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+            const logMag = Math.log1p(mag * 500);
+            mE       += mag;
+            mFluxLog += Math.max(0, logMag - prevMidLog[k - midLo]);
+            prevMidLog[k - midLo] = logMag;
+        }
+        midEnergy[f] = mE / (midHi - midLo + 1);
+        midFlux[f]   = mFluxLog / (midHi - midLo + 1);
+
+        // Hi freq flux (hihat detection)
+        let hFlux=0;
+        for(let k=hiLo; k<=Math.min(hiHi,N/2-1); k++){
+            const mag=Math.sqrt(re[k]*re[k]+im[k]*im[k]);
+            const logMag=Math.log1p(mag*500);
+            hFlux+=Math.max(0,logMag-prevHiLog[k-hiLo]);
+            prevHiLog[k-hiLo]=logMag;
+        }
+        hiFluxLog[f]=(hiHi>hiLo)?hFlux/(hiHi-hiLo+1):0;
+
+        if(onProgress && f % 2000 === 0) onProgress(0.1 + (f / numFrames) * 0.52);
+    }
+    if(onProgress) onProgress(0.65);
+
+    const sBassFlux  = medianSmooth(bassFluxLog, 3);
+    const sMidEnergy = medianSmooth(midEnergy,   25);
+    const sMidFlux   = medianSmooth(midFlux,     10);
+
+    const sHiFlux = medianSmooth(hiFluxLog, 3);
+    const hiAvg = arrAvg(sHiFlux);
+
+    // ---- RAW ONSET DETECTION (log-flux + adaptive threshold) ----
+    const beatCtxF    = Math.round(1.5 * SR / HOP);
+    const minOnsetGap = Math.round(0.28 * SR / HOP); // looser gap — grid will clean it up
+    const rawOnsetFrames = [];
+    let lastOnsetF = -9999;
+    let runSum = 0;
+    const runBuf = [];
+
+    for(let f = 0; f < numFrames; f++){
+        runBuf.push(sBassFlux[f]);
+        runSum += sBassFlux[f];
+        if(runBuf.length > beatCtxF){ runSum -= runBuf.shift(); }
+        if(f < beatCtxF) continue;
+
+        const localMean = runSum / runBuf.length;
+        if(sBassFlux[f] > localMean * 1.85 && sBassFlux[f] > 0.00006 && f - lastOnsetF > minOnsetGap){
+            rawOnsetFrames.push(f);
+            lastOnsetF = f;
+        }
+    }
+    if(onProgress) onProgress(0.72);
+
+    // ---- TEMPO AUTOCORRELATION ----
+    // Build inter-onset interval histogram → find dominant beat period
+    const frameTime = HOP / SR;
+    const minBPM = 55, maxBPM = 210;
+    const minIOI = Math.round((60 / maxBPM) / frameTime);
+    const maxIOI = Math.round((60 / minBPM) / frameTime);
+
+    const ioiHist = new Float32Array(maxIOI + 1);
+    for(let i = 0; i < rawOnsetFrames.length; i++){
+        for(let j = i + 1; j < rawOnsetFrames.length; j++){
+            const diff = rawOnsetFrames[j] - rawOnsetFrames[i];
+            if(diff > maxIOI) break;
+            if(diff >= minIOI) ioiHist[diff] += 1.0 / (j - i + 1); // weight by closeness
+        }
+    }
+    // Also add harmonics (2× and 0.5×) for robustness
+    const ioiSmooth = medianSmooth(ioiHist, 2);
+    let bestIOI = minIOI, bestVal = -1;
+    for(let d = minIOI; d <= maxIOI; d++){
+        const v = ioiSmooth[d];
+        if(v > bestVal){ bestVal = v; bestIOI = d; }
+    }
+
+    const beatPeriodSec = bestIOI * frameTime;
+    const detectedBPM   = 60 / beatPeriodSec;
+    console.log(`[CB] BPM: ${detectedBPM.toFixed(1)}, period: ${beatPeriodSec.toFixed(3)}s, raw onsets: ${rawOnsetFrames.length}`);
+    if(onProgress) onProgress(0.80);
+
+    // ---- BEAT GRID QUANTIZATION ----
+    // Find best phase (offset) for the grid by minimising distance to raw onsets
+    const phaseSteps = 80;
+    let bestPhase = 0, bestPhaseErr = Infinity;
+    for(let p = 0; p < phaseSteps; p++){
+        const phase = (p / phaseSteps) * beatPeriodSec;
+        let err = 0;
+        for(const of of rawOnsetFrames){
+            const t = of * frameTime;
+            const nearGrid = Math.round((t - phase) / beatPeriodSec) * beatPeriodSec + phase;
+            err += Math.min(Math.abs(t - nearGrid), beatPeriodSec * 0.5);
+        }
+        if(err < bestPhaseErr){ bestPhaseErr = err; bestPhase = phase; }
+    }
+
+    // Emit grid beats only where a raw onset validates them (within ±40% of period)
+    const halfWindow = beatPeriodSec * 0.40;
+    const fftOffset  = (N / 2) / SR;
+    const events     = [];
+
+    for(let t = bestPhase; t < dur - 0.1; t += beatPeriodSec){
+        const confirmed = rawOnsetFrames.some(of => Math.abs(of * frameTime - t) < halfWindow);
+        if(confirmed){
+            const f = Math.min(Math.round(t * SR / HOP), numFrames-1);
+            const isHihat = sHiFlux[f] > sBassFlux[f] * 1.5 && sHiFlux[f] > hiAvg * 1.2;
+            events.push({ time: Math.max(0, t - fftOffset), type: 'beat', hihat: isHihat });
+        }
+    }
+    if(onProgress) onProgress(0.87);
+
+    // ---- HOLD DETECTION (flux/energy ratio — sustained vs attacking) ----
+    const midEAvg    = arrAvg(sMidEnergy);
+    const holdMinF   = Math.round(1.2 * SR / HOP);
+    const holdMergeF = Math.round(0.5 * SR / HOP);
+    const beatFrameSet = new Set(rawOnsetFrames);
+
+    const midRatio = new Float32Array(numFrames);
+    for(let f = 0; f < numFrames; f++){
+        midRatio[f] = sMidEnergy[f] > 0.0001 ? sMidFlux[f] / sMidEnergy[f] : 999;
+    }
+    const sMidRatio = medianSmooth(midRatio, 8);
+    const ratioAvg  = arrAvg(sMidRatio);
+
+    let holdStart = -1;
+    const rawHolds = [];
+    const nearW = Math.round(0.12 * SR / HOP);
+
+    for(let f = 0; f < numFrames; f++){
+        let nearBeat = false;
+        for(let k = Math.max(0, f - nearW); k <= Math.min(numFrames-1, f + nearW); k++)
+            if(beatFrameSet.has(k)){ nearBeat = true; break; }
+
+        const isSustained = sMidEnergy[f] > midEAvg * 1.15   // raised from 1.05
+                         && sMidRatio[f]  < ratioAvg * 0.65  // stricter ratio
+                         && !nearBeat;
+
+        if(isSustained){
+            if(holdStart < 0) holdStart = f;
+        } else {
+            if(holdStart >= 0){
+                if(f - holdStart >= holdMinF) rawHolds.push({ startF: holdStart, endF: f });
+                holdStart = -1;
+            }
+        }
+    }
+
+    const mergedHolds = [];
+    for(const h of rawHolds){
+        const last = mergedHolds[mergedHolds.length - 1];
+        if(last && h.startF - last.endF < holdMergeF) last.endF = h.endF;
+        else mergedHolds.push({...h});
+    }
+    for(const h of mergedHolds){
+        events.push({ time: h.startF * HOP / SR, type: 'hold', duration: (h.endF - h.startF) * HOP / SR });
+    }
+    if(onProgress) onProgress(0.95);
+    events.sort((a,b) => a.time - b.time);
+
+    const holds = events.filter(e => e.type === 'hold');
+    let beats = events.filter(e => {
+        if(e.type !== 'beat') return false;
+        return !holds.some(h => e.time >= h.time - 0.3 && e.time <= h.time + h.duration + 0.3);
+    });
+    beats = pruneDense(beats, 0.38);
+    if(beats.length < 6) beats = generateFallbackBeats(dur, holds);
+
+    // Chorus detection: frames with bass flux well above rolling average = loud section
+    const chorusSmooth = medianSmooth(sBassFlux, 120); // ~3s window
+    const chorusAvg = arrAvg(chorusSmooth);
+    beats.forEach(b => {
+        const f = Math.min(Math.round(b.time * SR / HOP), numFrames - 1);
+        b.chorus = chorusSmooth[f] > chorusAvg * 1.5;
+        // hihat already set, preserve it
+    });
+
+    // Split holds longer than 3.5s so player doesn't hold forever
+    const MAX_HOLD = 3.5;
+    const finalHolds = [];
+    for(const h of holds){
+        let t = h.time, rem = h.duration;
+        while(rem > MAX_HOLD){
+            finalHolds.push({ type:'hold', time: t, duration: MAX_HOLD });
+            t += MAX_HOLD + 0.25; rem -= MAX_HOLD + 0.25;
+        }
+        if(rem >= 0.8) finalHolds.push({ type:'hold', time: t, duration: rem });
+    }
+    if(onProgress) onProgress(1.0);
+    console.log(`[CB] Chart: ${beats.length} beats, ${finalHolds.length} holds | BPM: ${detectedBPM.toFixed(1)}`);
+    return [...beats, ...finalHolds].sort((a,b) => a.time - b.time);
+}
+
+// Median-style smoothing (actually mean in window, but applied iteratively)
+function medianSmooth(arr, r) {
+    const out = new Float32Array(arr.length);
+    for(let i = 0; i < arr.length; i++){
+        let sum = 0, n = 0;
+        for(let k = Math.max(0,i-r); k <= Math.min(arr.length-1,i+r); k++){ sum+=arr[k]; n++; }
+        out[i] = sum / n;
+    }
+    return out;
+}
+
+function arrAvg(arr) {
+    let s = 0;
+    for(let i = 0; i < arr.length; i++) s += arr[i];
+    return s / arr.length;
+}
+
+// Remove beats closer than minGap seconds to each other
+function pruneDense(beats, minGap) {
+    const out = [];
+    let lastT = -999;
+    for(const b of beats){
+        if(b.time - lastT >= minGap){ out.push(b); lastT = b.time; }
+    }
+    return out;
+}
+
+function generateFallbackBeats(duration, holds) {
+    const interval = 0.5;
+    const result = [];
+    for(let t = 1.0; t < duration - 1; t += interval){
+        const inHold = holds.some(h => t >= h.time - 0.4 && t <= h.time + h.duration + 0.4);
+        if(!inHold) result.push({ time: t, type: 'beat' });
+    }
+    return result;
+}
+
+// ============================================================
+
+function stopAudio(closeCtx=false){
+    if(progressTickId){clearInterval(progressTickId);progressTickId=null;}
+    try{ if(sourceNode){ sourceNode.onended=null; sourceNode.stop(); } }catch(e){}
+    try{ if(sourceNode){ sourceNode.disconnect(); } }catch(e){}
+    try{ if(analyser){ analyser.disconnect(); } }catch(e){}
+    sourceNode=null;
+    analyser=null;
+
+    // Keep AudioContext alive for smoother next-track transitions and background predecode.
+    if(closeCtx){
+        try{ if(audioContext){ audioContext.close(); } }catch(e){}
+        audioContext=null;
+    }
+}
+function restartGame(){document.getElementById('pause-overlay').style.display='none';loadAndPlay(selectedIndex);}
+function goToMenu(){
+    stopAudio(true);gameRunning=false;
+    if(animFrameId){cancelAnimationFrame(animFrameId);animFrameId=null;}
+    ctx.clearRect(0,0,W,H);
+    document.getElementById('pause-overlay').style.display='none';
+    document.getElementById('game-ui').style.display='none';
+    document.getElementById('menu').style.display='flex';
+    renderSongList();
+}
+function togglePause(){
+    if(!gameRunning)return;paused=!paused;
+    const icon=document.getElementById('sp-pause-icon');
+    if(paused){
+        audioContext.suspend();
+        document.getElementById('pause-overlay').style.display='flex';
+        icon.innerHTML='<path d="M8 5v14l11-7z"/>';
+    } else {
+        audioContext.resume();
+        document.getElementById('pause-overlay').style.display='none';
+        icon.innerHTML='<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        animFrameId=requestAnimationFrame(gameLoop);
+    }
+}
+function prevSong(){
+    if(!gameRunning)return;
+    const idx=(selectedIndex-1+songs.length)%songs.length;
+    selectedIndex=idx;loadAndPlay(idx);
+}
+function nextSong(){
+    if(!gameRunning)return;
+    const idx=(selectedIndex+1)%songs.length;
+    selectedIndex=idx;loadAndPlay(idx);
+}
+function openPicker(){
+    if(!gameRunning)return;
+    audioContext.suspend();paused=true;
+    document.getElementById('picker-list').innerHTML=songs.map((s,i)=>`
+        <div class="song-item ${i===selectedIndex?'selected':''}" onclick="pickSong(${i})">
+            <div class="song-cover">${coverHtml(s)}</div>
+            <div class="song-info"><div class="song-name">${s.name}</div></div>
+        </div>`).join('');
+    document.getElementById('picker').style.display='flex';
+}
+function closePicker(){
+    document.getElementById('picker').style.display='none';
+    if(paused){paused=false;audioContext.resume();animFrameId=requestAnimationFrame(gameLoop);}
+}
+function pickSong(i){document.getElementById('picker').style.display='none';paused=false;selectedIndex=i;loadAndPlay(i);}
+
+// ---- SEEK ----
+let isSeeking = false;
+function seekStart(e){
+    isSeeking = true;
+    const thumb = document.getElementById('sp-bar-thumb');
+    if(thumb) thumb.style.opacity = '1';
+    seekTo(e);
+}
+function seekMove(e){
+    if(!isSeeking) return;
+    seekTo(e);
+}
+function seekEnd(e){
+    isSeeking = false;
+    const thumb = document.getElementById('sp-bar-thumb');
+    if(thumb) thumb.style.opacity = '0';
+    seekTo(e);
+}
+function seekTo(e){
+    if(!audioContext || !audioDuration) return;
+    const track = document.getElementById('sp-bar-track');
+    const rect = track.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const targetTime = pct * audioDuration;
+
+    // Rebuild chart index for new position
+    chartIndex = 0;
+    while(chartIndex < gameChart.length && gameChart[chartIndex].time - FALL_TIME < targetTime) chartIndex++;
+    crystals = []; holdLines = []; activeHold = null;
+
+    // Restart audio from new position
+    try { sourceNode.onended = null; sourceNode.stop(); } catch(e2){}
+    sourceNode = audioContext.createBufferSource();
+    sourceNode.buffer = _seekAudioBuf;
+    sourceNode.connect(analyser);
+    analyser.connect(audioContext.destination);
+    sourceNode.start(0, targetTime);
+    audioStartTime = audioContext.currentTime - targetTime;
+    sourceNode.onended = () => {
+        clearInterval(progressTickId);
+        if(songs.length){
+            selectedIndex = (selectedIndex + 1) % songs.length;
+            loadAndPlay(selectedIndex);
+        }
+    };
+
+    document.getElementById('sp-bar-fill').style.width = (pct*100)+'%';
+    const thumb = document.getElementById('sp-bar-thumb');
+    if(thumb) thumb.style.left = (pct*100)+'%';
+}
+let _seekAudioBuf = null; // store buffer for seeking
+canvas.addEventListener('touchmove',(e)=>{e.preventDefault();touchX=e.touches[0].clientX;},{passive:false});
+canvas.addEventListener('touchstart',(e)=>{touchX=e.touches[0].clientX;});
+window.addEventListener('mousemove',(e)=>{touchX=e.clientX;});
+
+function scheduleCrystal(arrivalTime, opts={}){
+    const chorus = opts.chorus || false;
+    const hihat  = opts.hihat  || false;
+    const quiet  = opts.quiet  || false;
+    const uuuu   = opts.uuuu   || false;
+    const x = 30 + Math.random() * (W - 60);
+    const size = chorus ? 20+Math.random()*8 : hihat ? 9+Math.random()*4 : 14+Math.random()*9;
+
+    // Color: uuu = random from all palettes (sharp per-ball), else from current palette
+    let color;
+    if(uuuu){
+        const allColors = [
+            palettesByMoment.chorus?.player, palettesByMoment.chorus?.crystals[0],
+            palettesByMoment.alt?.player,    palettesByMoment.alt?.crystals[0],
+            palettesByMoment.quiet?.crystals[0], palettesByMoment.normal?.crystals[1],
+        ].filter(Boolean);
+        color = allColors.length ? allColors[Math.floor(Math.random()*allColors.length)] : palette.player;
+    } else {
+        const pool = palette.crystals;
+        color = pool[Math.floor(Math.random()*pool.length)];
+    }
+
+    const adjustedArrival = quiet ? arrivalTime+0.25 : arrivalTime;
+    crystals.push({ x, size, color, arrivalTime:adjustedArrival, chorus, hihat, quiet, uuuu,
+        collected:false, missed:false, missedLogged:false, trailPoints:[] });
+}
+
+// holdStartTime = when hold begins in audio time
+// holdDuration = seconds the hold lasts
+function scheduleHoldLine(holdStartTime, holdDuration){
+    // The hold line scrolls in from bottom, similar to how crystals fall
+    // We draw a horizontal path the player must follow
+    holdLines.push({
+        startTime: holdStartTime,
+        endTime: holdStartTime + holdDuration,
+        duration: holdDuration,
+        pathPoints: generateHoldPath(holdDuration),
+        scored: false,
+        active: false,
+        hit: false,
+        hitFrames: 0,   // frames player was within tolerance
+        totalFrames: 0, // total frames hold was active
+        failed: false,
+    });
+}
+
+function generateHoldPath(duration){
+    // Generate smooth curved path across the screen
+    const numPoints = Math.max(10, Math.floor(duration * 8));
+    const points = [];
+    // Random but smooth waypoints
+    let x = 0.2 + Math.random() * 0.6; // 0-1 normalized
+    points.push(x);
+    for(let i = 1; i < numPoints; i++){
+        x += (Math.random() - 0.5) * 0.25;
+        x = Math.max(0.1, Math.min(0.9, x));
+        points.push(x);
+    }
+    // Smooth it
+    const smoothed = [];
+    for(let i = 0; i < points.length; i++){
+        let s = 0, cnt = 0;
+        for(let k = Math.max(0,i-2); k <= Math.min(points.length-1, i+2); k++){
+            s += points[k]; cnt++;
+        }
+        smoothed.push(s/cnt);
+    }
+    return smoothed;
+}
+
+function spawnParticles(x,y,color){
+    for(let i=0;i<24;i++){
+        const angle=Math.random()*Math.PI*2,spd=2+Math.random()*7;
+        const size=3+Math.random()*6;
+        particles.push({x,y,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd,life:1,color,size});
+    }
+}
+// Hihat: horizontal water droplets
+function spawnHihatSplash(x,y,color){
+    for(let i=0;i<18;i++){
+        const dir = (Math.random()<0.5?1:-1);
+        const spd = 4 + Math.random()*10;
+        const vy = (Math.random()-0.5)*2.5;
+        particles.push({x,y,vx:dir*spd,vy,life:0.8,color,size:2+Math.random()*3,hihat:true});
+    }
+}
+// Wave flash that rolls down from hit point
+function spawnWaveFlash(x,y,color){
+    waveFlashes.push({x,y,life:1,color,vy:4});
+}
+function spawnShockwave(x,y,color){
+    shockwaves.push({x,y,r:0,maxR:90,life:1,color});
+    // second smaller ring
+    shockwaves.push({x,y,r:0,maxR:55,life:1,color:'#ffffff',delay:0.08,born:performance.now()});
+}
+function spawnScorePopup(x,y,pts,combo){
+    const text = combo>1 ? `+${pts} ×${combo}` : `+${pts}`;
+    scorePopups.push({x,y,text,life:1,vy:-2.5});
+}
+
+function fmtTime(s){
+    const m=Math.floor(s/60),sec=Math.floor(s%60);
+    return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+// ---- LYRICS ----
+function parseLrc(lrcStr){
+    const lines = lrcStr.split('\n');
+    const result = [];
+    const breaks = [];
+    const re = /\[(\d+):(\d+\.\d+)\](.*)/;
+    let lastHadText = false;
+    for(const line of lines){
+        const m = line.match(re);
+        if(m){
+            const time = parseInt(m[1])*60 + parseFloat(m[2]);
+            const text = m[3].trim();
+            if(text){
+                result.push({time, text});
+                lastHadText = true;
+            } else if(lastHadText){
+                // Empty timestamped line = section boundary
+                breaks.push(time);
+                lastHadText = false;
+            }
+        }
+    }
+    sectionBreaks = breaks;
+    return result.sort((a,b)=>a.time-b.time);
+}
+
+async function fetchLyrics(artist, title){
+    lyrics = [];
+    sectionBreaks = [];
+    currentLyricIdx = -1;
+    lyricsLoaded = false;
+    if(!artist || !title) return;
+    try {
+        const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
+        const res = await fetch(url);
+        if(!res.ok) return;
+        const data = await res.json();
+        if(data.syncedLyrics){
+            lyrics = parseLrc(data.syncedLyrics);
+            lyricsLoaded = lyrics.length > 0;
+        }
+    } catch(e) {}
+}
+function updateProgress(){
+    if(!audioContext||paused||isSeeking)return;
+    const elapsed=audioContext.currentTime-audioStartTime;
+    const pct=audioDuration>0?Math.min(elapsed/audioDuration,1)*100:0;
+    document.getElementById('sp-bar-fill').style.width=pct+'%';
+    document.getElementById('sp-current').textContent=fmtTime(Math.min(elapsed,audioDuration));
+    const thumb=document.getElementById('sp-bar-thumb');
+    if(thumb) thumb.style.left=pct+'%';
+}
+
+// ---- GAME LOOP ----
+function gameLoop(){
+    if(!gameRunning||paused)return;
+
+    analyser.getByteFrequencyData(dataArray);
+    const now=audioContext.currentTime - audioStartTime;
+    const bass=dataArray.slice(0,12).reduce((a,b)=>a+b,0)/12;
+    const hihatRaw=dataArray.slice(80,120).reduce((a,b)=>a+b,0)/40;
+    hihatEnergy=hihatEnergy*0.85+hihatRaw*0.15;
+    energy=bass;
+
+    // ---- COLOR PRIORITY SYSTEM ----
+    beatTimestamps = beatTimestamps.filter(t => now-t < 4.0);
+
+    // uuu detection: slow sparse beat intervals
+    let detectedUuu = false;
+    if(beatTimestamps.length >= 2){
+        const ivals = [];
+        for(let i=1;i<Math.min(beatTimestamps.length,4);i++)
+            ivals.push(beatTimestamps[i]-beatTimestamps[i-1]);
+        const avg = ivals.reduce((a,b)=>a+b,0)/ivals.length;
+        detectedUuu = avg > 0.7 && avg < 2.5 && beatTimestamps.length <= 4;
+    }
+
+    // Color cycling: ONLY every 30s, independent of lyrics (lyrics still display)
+    if(now - lastFallbackTime > 30){
+        lastFallbackTime = now;
+        shiftPaletteSoft();
+    }
+
+    tickPalette();
+
+
+    edgeGlowAlpha += (combo>=8 ? 0.3 : 0) - edgeGlowAlpha*0.08;
+    edgeGlowAlpha  = Math.max(0, Math.min(0.5, edgeGlowAlpha));
+
+    // ---- SPAWN FROM CHART ----
+    // now = song time elapsed (audioContext.currentTime - audioStartTime)
+    while(chartIndex < gameChart.length){
+        const ev = gameChart[chartIndex];
+        // We want to spawn the object FALL_TIME before it should arrive at player
+        const spawnAt = ev.time - FALL_TIME;
+        if(now < spawnAt) break; // not time yet
+
+        if(ev.type === 'beat'){
+            beatTimestamps.push(now);
+            scheduleCrystal(ev.time, {
+                chorus: ev.chorus,
+                confidence: ev.confidence,
+                hihat: ev.hihat || false,
+                quiet: bass < 40,
+                uuuu: false,
+            });
+        } else if(ev.type === 'hold'){
+            scheduleHoldLine(ev.time, ev.duration);
+        }
+        chartIndex++;
+    }
+
+    player.x+=(touchX-player.x)*0.18;
+    player.x=Math.max(player.size,Math.min(W-player.size,player.x));
+    playerScale+=(1-playerScale)*0.2;
+    flashAlpha*=0.82;
+    screenShake*=0.84;
+    aberration*=0.84;
+
+    const pulse=energy/255;
+
+    // BG
+    ctx.save();
+    if(screenShake>0.5) ctx.translate((Math.random()-0.5)*screenShake,(Math.random()-0.5)*screenShake);
+
+    ctx.fillStyle=palette.bg;
+    ctx.fillRect(0,0,W,H);
+
+    // Hold glow BG when hold active
+    if(activeHold){
+        const holdProgress = (now - activeHold.startTime) / activeHold.duration;
+        const glowAlpha = 0.08 + Math.sin(holdProgress * Math.PI * 4) * 0.04;
+        ctx.fillStyle=`rgba(${hexToRgb(palette.player)},${glowAlpha})`;
+        ctx.fillRect(0,0,W,H);
+    }
+
+    // Chorus BG pulse — check if current event is in chorus
+    const currentSection = gameChart.find(e => e.type==='beat' && e.chorus && Math.abs(e.time - now) < 2);
+    if(currentSection){
+        ctx.fillStyle=`rgba(${hexToRgb(palette.player)},${0.04 + pulse*0.04})`;
+        ctx.fillRect(0,0,W,H);
+    }
+
+    if(pulse>0.15){
+        ctx.fillStyle=`rgba(${hexToRgb(palette.player)},${pulse*0.07})`;
+        ctx.fillRect(0,0,W,H);
+    }
+    if(flashAlpha>0.01){
+        ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
+        ctx.fillRect(0,0,W,H);
+    }
+
+    // Edge glow for high combo
+    if(edgeGlowAlpha > 0.01){
+        const grad = ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.85);
+        grad.addColorStop(0,'transparent');
+        grad.addColorStop(1,`rgba(${hexToRgb(palette.player)},${edgeGlowAlpha})`);
+        ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+    }
+
+    // ---- LYRICS ----
+    if(lyrics.length > 0){
+        const elapsed = now;
+
+        let newIdx = -1;
+        for(let i = 0; i < lyrics.length; i++){
+            if(lyrics[i].time <= elapsed) newIdx = i;
+            else break;
+        }
+        if(newIdx !== currentLyricIdx){
+            currentLyricIdx = newIdx;
+            lyricTransition = 0;
+        }
+        lyricTransition = Math.min(1, lyricTransition + 0.05);
+
+        const PAD = 28;
+        const FONT_SIZE = 28;
+        const LINE_H = FONT_SIZE * 1.55;
+        const MAX_W = W - PAD * 2;
+        const ANCHOR_Y = H * 0.52;
+
+        ctx.font = `700 ${FONT_SIZE}px 'DM Sans', sans-serif`;
+
+        function wrapText(text, maxW){
+            const words = text.split(' ');
+            const lines = [];
+            let cur = '';
+            for(const w of words){
+                const test = cur ? cur + ' ' + w : w;
+                if(ctx.measureText(test).width <= maxW){ cur = test; }
+                else { if(cur) lines.push(cur); cur = w; }
+            }
+            if(cur) lines.push(cur);
+            return lines.length ? lines : [text];
+        }
+
+        const SHOW_PAST = 6;
+        const SHOW_FUTURE = 6;
+        let layout = [];
+
+        if(currentLyricIdx >= 0){
+            const wrapped = wrapText(lyrics[currentLyricIdx].text, MAX_W);
+            layout.push({idx: currentLyricIdx, wrapped, yTop: ANCHOR_Y});
+
+            let y = ANCHOR_Y + wrapped.length * LINE_H + LINE_H * 0.4;
+            for(let i = currentLyricIdx + 1; i <= currentLyricIdx + SHOW_FUTURE && i < lyrics.length; i++){
+                const w = wrapText(lyrics[i].text, MAX_W);
+                layout.push({idx: i, wrapped: w, yTop: y});
+                y += w.length * LINE_H + LINE_H * 0.4;
+            }
+
+            let yUp = ANCHOR_Y;
+            for(let i = currentLyricIdx - 1; i >= Math.max(0, currentLyricIdx - SHOW_PAST); i--){
+                const w = wrapText(lyrics[i].text, MAX_W);
+                yUp -= w.length * LINE_H + LINE_H * 0.4;
+                layout.push({idx: i, wrapped: w, yTop: yUp});
+            }
+        } else {
+            let y = ANCHOR_Y;
+            for(let i = 0; i < Math.min(SHOW_FUTURE, lyrics.length); i++){
+                const w = wrapText(lyrics[i].text, MAX_W);
+                layout.push({idx: i, wrapped: w, yTop: y});
+                y += w.length * LINE_H + LINE_H * 0.4;
+            }
+        }
+
+        for(const item of layout){
+            const {idx, wrapped, yTop} = item;
+            const isCurrent = idx === currentLyricIdx;
+            const isPast = idx < currentLyricIdx;
+
+            if(yTop > H + 100 || yTop + wrapped.length * LINE_H < -60) continue;
+
+            let alpha;
+            if(isCurrent)      alpha = 0.95 * lyricTransition;
+            else if(isPast)    alpha = 0.28;
+            else               alpha = 0.28;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.font = `700 ${FONT_SIZE}px 'DM Sans', sans-serif`;
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+
+            for(let li = 0; li < wrapped.length; li++){
+                ctx.fillText(wrapped[li], PAD, yTop + li * LINE_H);
+            }
+            ctx.restore();
+        }
+    }
+
+    // ---- HOLD LINES (osu slider style) ----
+    const nextHL = [];
+    for(let i = 0; i < holdLines.length; i++){
+        const hl = holdLines[i];
+        if(now < hl.startTime - FALL_TIME){ nextHL.push(hl); continue; }
+        if(now > hl.endTime + 1.0) continue;
+
+        const isActive = now >= hl.startTime && now <= hl.endTime;
+
+        if(isActive && !activeHold && !hl.failed){
+            activeHold = hl; hl.active = true;
+            document.getElementById('combo-display').textContent = '〰️ hold!';
+        }
+        if(activeHold === hl && now > hl.endTime){
+            const acc = hl.totalFrames > 0 ? hl.hitFrames / hl.totalFrames : 0;
+            if(!hl.failed && acc > 0.25){
+                const pts = Math.round(acc * (500 + hl.duration * 150));
+                score += pts;
+                document.getElementById('score-display').textContent = score;
+                const pct = Math.round(acc * 100);
+                document.getElementById('combo-display').textContent = `+${pts}  ${pct}% hold!`;
+                combo++;
+                flashAlpha = 0.06 + acc * 0.08;
+                playerScale = 1.4 + acc * 0.6;
+                screenShake = 4 * acc;
+                aberration = 0.4 * acc;
+                spawnParticles(player.x, player.y, palette.player);
+                spawnShockwave(player.x, player.y, palette.player);
+            } else {
+                combo = 0;
+                document.getElementById('combo-display').textContent = 'miss...';
+            }
+            activeHold = null;
+        }
+
+        ctx.save();
+        const baseColor = hl.failed ? '#555' : palette.player;
+        const pts = hl.pathPoints;
+
+        // Build visible points with positions
+        const visible = [];
+        let headX=0,headY=0,tailX=0,tailY=0;
+        for(let k=0; k<pts.length; k++){
+            const pTime = hl.startTime + (k/(pts.length-1))*hl.duration;
+            const yPos = PLAYER_Y - (pTime - now)*(PLAYER_Y/FALL_TIME);
+            const xPos = pts[k]*(W-80)+40;
+            if(k===0){headX=xPos;headY=yPos;}
+            if(k===pts.length-1){tailX=xPos;tailY=yPos;}
+            visible.push({x:xPos,y:yPos,inView:yPos>=-40&&yPos<=H+40});
+        }
+
+        // Thick slider body
+        ctx.strokeStyle = `rgba(${hexToRgb(baseColor)},0.28)`;
+        ctx.lineWidth = player.size * 2;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        let first=true;
+        for(const p of visible){
+            if(!p.inView){first=true;continue;}
+            if(first){ctx.moveTo(p.x,p.y);first=false;} else ctx.lineTo(p.x,p.y);
+        }
+        ctx.stroke();
+
+        // Bright border line on top
+        ctx.strokeStyle = `rgba(${hexToRgb(baseColor)},${isActive?0.9:0.5})`;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = baseColor; ctx.shadowBlur = isActive ? 18 : 8;
+        first=true;
+        ctx.beginPath();
+        for(const p of visible){
+            if(!p.inView){first=true;continue;}
+            if(first){ctx.moveTo(p.x,p.y);first=false;} else ctx.lineTo(p.x,p.y);
+        }
+        ctx.stroke();
+        ctx.shadowBlur=0;
+
+        // Head crystal (tail of slider coming from top)
+        const drawBall=(x,y,r)=>{
+            if(y<-40||y>H+40)return;
+            ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+            ctx.fillStyle=baseColor;ctx.shadowColor=baseColor;ctx.shadowBlur=16;ctx.fill();
+            ctx.beginPath();ctx.arc(x,y,r*0.45,0,Math.PI*2);
+            ctx.fillStyle='#fff';ctx.shadowBlur=0;ctx.fill();
+        };
+        drawBall(headX,headY,14);
+        drawBall(tailX,tailY,14);
+
+        // Active: slider ball (target) + accuracy logic
+        if(isActive){
+            const t = Math.min((now - hl.startTime)/hl.duration, 1);
+            const ki = Math.min(Math.floor(t*(pts.length-1)), pts.length-1);
+            const targetX = pts[ki]*(W-80)+40;
+
+            // Slider ball ring
+            ctx.beginPath();ctx.arc(targetX,PLAYER_Y,22,0,Math.PI*2);
+            ctx.strokeStyle=hl.failed?'#ff4444':'#ffffff';
+            ctx.lineWidth=3;ctx.globalAlpha=0.6+Math.sin(now*8)*0.3;ctx.stroke();
+            ctx.globalAlpha=1;
+
+            // Accuracy tracking
+            hl.totalFrames++;
+            const dist=Math.abs(player.x-targetX);
+            if(dist<60){
+                hl.hitFrames++;
+                if(dist<28&&Math.random()<0.3){
+                    particles.push({x:player.x+(Math.random()-0.5)*10,y:PLAYER_Y,
+                        vx:(Math.random()-0.5)*2,vy:-1-Math.random()*2,
+                        life:0.6,color:palette.player,size:3+Math.random()*3});
+                }
+            } else if(dist>90&&!hl.failed){
+                // Too far — break combo, mark failed
+                hl.failed=true; combo=0; activeHold=null;
+                document.getElementById('combo-display').textContent='miss...';
+            }
+        }
+        ctx.restore();
+        nextHL.push(hl);
+    }
+    holdLines = nextHL;
+
+    // ---- CRYSTALS ----
+    const nextC=[];
+    for(let i=0;i<crystals.length;i++){
+        const c=crystals[i];
+        if(c.collected||c.missed)continue;
+
+        const spawnTime=c.arrivalTime-FALL_TIME;
+        const progress=(now-spawnTime)/FALL_TIME;
+        if(progress<0){nextC.push(c);continue;}
+
+        const elapsed = now - spawnTime;
+        c.y = -c.size + (PLAYER_Y + c.size) * (elapsed / FALL_TIME);
+
+        if(c.y > canvas.height + 60) continue;
+
+        if(c.y > PLAYER_Y + c.size * 2 && !c.missedLogged){
+            c.missedLogged = true;
+            if(combo>0){combo=0;document.getElementById('combo-display').textContent='';}
+        }
+
+        if(!c.missedLogged){
+            const dx=c.x-player.x,dy=c.y-player.y;
+            if(Math.sqrt(dx*dx+dy*dy)<c.size+player.size){
+                c.collected=true;
+                combo++;
+                const basepts = c.chorus ? 200 : c.uuuu ? 150 : 100;
+                const pts = basepts*Math.min(combo,10);
+                score+=pts;
+                document.getElementById('score-display').textContent=score;
+                document.getElementById('combo-display').textContent=combo>1?`${combo}x комбо!`:'';
+                if(c.hihat){
+                    // Water splash — horizontal particles
+                    spawnHihatSplash(c.x, c.y, c.color);
+                } else {
+                    spawnParticles(c.x,c.y,c.color);
+                    spawnShockwave(c.x,c.y,c.color);
+                    // Wave down flash
+                    spawnWaveFlash(c.x, c.y, c.color);
+                }
+                spawnScorePopup(c.x,c.y,pts,combo);
+                flashAlpha=c.chorus?0.10:c.hihat?0.02:0.05;
+                playerScale=c.chorus?2.0:c.hihat?1.2:1.6;
+                if(c.chorus){ screenShake=6; aberration=0.8; }
+                continue;
+            }
+        }
+
+        const alpha = c.missedLogged ? 0.35 : 1;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        // Trail for quiet crystals
+        if(c.trail && c.trailPoints){
+            c.trailPoints.push({x:c.x, y:c.y});
+            if(c.trailPoints.length > 12) c.trailPoints.shift();
+            for(let ti=0; ti<c.trailPoints.length-1; ti++){
+                const tp = c.trailPoints[ti];
+                ctx.globalAlpha = alpha * (ti/c.trailPoints.length) * 0.4;
+                ctx.beginPath(); ctx.arc(tp.x, tp.y, c.size*(ti/c.trailPoints.length)*0.7,0,Math.PI*2);
+                ctx.fillStyle=c.color; ctx.shadowColor=c.color; ctx.shadowBlur=6; ctx.fill();
+            }
+            ctx.globalAlpha = alpha;
+        }
+
+        // Chromatic aberration on hot drops
+        if(aberration > 0.15 && !c.missedLogged){
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.fillStyle='rgba(255,0,0,0.6)';ctx.beginPath();ctx.arc(c.x-aberration*8,c.y,c.size,0,Math.PI*2);ctx.fill();
+            ctx.fillStyle='rgba(0,255,255,0.6)';ctx.beginPath();ctx.arc(c.x+aberration*8,c.y,c.size,0,Math.PI*2);ctx.fill();
+            ctx.globalAlpha = alpha;
+        }
+
+        if(c.hihat){
+            // Small sharp cross/spark — hihat style
+            ctx.shadowColor=c.color; ctx.shadowBlur=c.missedLogged?4:16;
+            ctx.strokeStyle=c.color; ctx.lineWidth=2.5; ctx.lineCap='round';
+            ctx.beginPath();
+            ctx.moveTo(c.x-c.size,c.y); ctx.lineTo(c.x+c.size,c.y);
+            ctx.moveTo(c.x,c.y-c.size); ctx.lineTo(c.x,c.y+c.size);
+            ctx.stroke();
+            const d=c.size*0.65;
+            ctx.beginPath();
+            ctx.moveTo(c.x-d,c.y-d); ctx.lineTo(c.x+d,c.y+d);
+            ctx.moveTo(c.x+d,c.y-d); ctx.lineTo(c.x-d,c.y+d);
+            ctx.stroke();
+        } else if(c.chorus){
+            // Diamond shape for chorus beats
+            ctx.beginPath();
+            ctx.moveTo(c.x, c.y - c.size*1.2);
+            ctx.lineTo(c.x + c.size*0.8, c.y);
+            ctx.lineTo(c.x, c.y + c.size*1.2);
+            ctx.lineTo(c.x - c.size*0.8, c.y);
+            ctx.closePath();
+            ctx.fillStyle=c.color;
+            ctx.shadowColor=c.color;
+            ctx.shadowBlur=c.missedLogged?6:30;
+            ctx.fill();
+            ctx.fillStyle='rgba(255,255,255,0.6)';
+            ctx.shadowBlur=0;
+            ctx.beginPath();
+            ctx.moveTo(c.x, c.y - c.size*0.5);
+            ctx.lineTo(c.x + c.size*0.3, c.y);
+            ctx.lineTo(c.x, c.y + c.size*0.2);
+            ctx.lineTo(c.x - c.size*0.3, c.y);
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.arc(c.x,c.y,c.size,0,Math.PI*2);
+            ctx.fillStyle=c.color;
+            ctx.shadowColor=c.color;
+            ctx.shadowBlur=c.missedLogged?6:20;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(c.x,c.y,c.size*0.45,0,Math.PI*2);
+            ctx.fillStyle='rgba(255,255,255,0.85)';
+            ctx.shadowBlur=0;
+            ctx.fill();
+        }
+        ctx.restore();
+        nextC.push(c);
+    }
+    crystals=nextC;
+
+    // PARTICLES
+    const nextP=[];
+    for(let i=0;i<particles.length;i++){
+        const p=particles[i];
+        p.x+=p.vx;p.y+=p.vy;p.vx*=0.93;p.vy*=0.93;p.life-=0.035;
+        if(p.life<=0)continue;
+        ctx.save();
+        ctx.globalAlpha=p.life*p.life;
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,(p.size||5)*p.life,0,Math.PI*2);
+        ctx.fillStyle=p.color;
+        ctx.shadowColor=p.color;
+        ctx.shadowBlur=12;
+        ctx.fill();
+        ctx.restore();
+        nextP.push(p);
+    }
+    particles=nextP;
+
+    // SHOCKWAVES
+    const nextSW=[];
+    for(let i=0;i<shockwaves.length;i++){
+        const sw=shockwaves[i];
+        sw.r+=sw.maxR*0.07;
+        sw.life-=0.055;
+        if(sw.life<=0)continue;
+        ctx.save();
+        ctx.globalAlpha=sw.life*0.7;
+        ctx.beginPath();
+        ctx.arc(sw.x,sw.y,sw.r,0,Math.PI*2);
+        ctx.strokeStyle=sw.color;
+        ctx.lineWidth=3*sw.life;
+        ctx.shadowColor=sw.color;
+        ctx.shadowBlur=15;
+        ctx.stroke();
+        ctx.restore();
+        nextSW.push(sw);
+    }
+    shockwaves=nextSW;
+
+    // SCORE POPUPS
+    const nextSP=[];
+    for(let i=0;i<scorePopups.length;i++){
+        const sp=scorePopups[i];
+        sp.y+=sp.vy;sp.life-=0.025;
+        if(sp.life<=0)continue;
+        ctx.save();
+        ctx.globalAlpha=sp.life;
+        ctx.font=`bold ${18+Math.floor((1-sp.life)*6)}px -apple-system,sans-serif`;
+        ctx.fillStyle='#ffffff';
+        ctx.shadowColor='rgba(255,255,255,0.8)';
+        ctx.shadowBlur=10;
+        ctx.textAlign='center';
+        ctx.fillText(sp.text,sp.x,sp.y);
+        ctx.restore();
+        nextSP.push(sp);
+    }
+    scorePopups=nextSP;
+
+    // WAVE FLASHES — roll down from hit point
+    const nextWF=[];
+    for(let i=0;i<waveFlashes.length;i++){
+        const wf=waveFlashes[i];
+        wf.y+=wf.vy; wf.vy*=1.08; wf.life-=0.045;
+        if(wf.life<=0||wf.y>H+60) continue;
+        ctx.save();
+        ctx.globalAlpha=wf.life*0.55;
+        const grd=ctx.createLinearGradient(0,wf.y-20,0,wf.y+20);
+        grd.addColorStop(0,'transparent');
+        grd.addColorStop(0.5,`rgba(${hexToRgb(wf.color)},0.8)`);
+        grd.addColorStop(1,'transparent');
+        ctx.fillStyle=grd;
+        ctx.fillRect(0,wf.y-20,W,40);
+        ctx.restore();
+        nextWF.push(wf);
+    }
+    waveFlashes=nextWF;
+
+    // PLAYER
+    ctx.save();
+    ctx.translate(player.x,player.y);
+    ctx.scale(playerScale,playerScale);
+    // Chromatic aberration on player during drops
+    if(aberration>0.15){
+        ctx.fillStyle='rgba(255,0,0,0.45)';
+        ctx.fillRect(-player.size/2-aberration*7,-player.size/2,player.size,player.size);
+        ctx.fillStyle='rgba(0,255,255,0.45)';
+        ctx.fillRect(-player.size/2+aberration*7,-player.size/2,player.size,player.size);
+    }
+    // outer glow ring
+    ctx.beginPath();
+    ctx.arc(0,0,player.size*1.5,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(${hexToRgb(palette.player)},${0.15+pulse*0.4})`;
+    ctx.lineWidth=3;
+    ctx.shadowColor=palette.player;
+    ctx.shadowBlur=20+pulse*30;
+    ctx.stroke();
+    // core — square normally, but during hold it pulses more
+    ctx.shadowColor=palette.player;
+    ctx.shadowBlur=18+pulse*35 + (activeHold ? Math.sin(now*10)*15 : 0);
+    ctx.fillStyle=palette.player;
+    const s=player.size;
+    ctx.fillRect(-s/2,-s/2,s,s);
+    // highlight
+    ctx.fillStyle='rgba(255,255,255,0.25)';
+    ctx.shadowBlur=0;
+    ctx.fillRect(-s/2,-s/2,s/2,s/2);
+    ctx.restore();
+
+    ctx.restore(); // end screen shake
+
+    animFrameId=requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>
